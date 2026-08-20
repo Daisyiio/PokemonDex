@@ -47,6 +47,12 @@ defineProps<{
     justify-content: center;
     border-radius: 50%;
   }
+  .type-badge-lg {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    gap: 0;
+  }
   .type-badge-text {
     display: none;
   }
