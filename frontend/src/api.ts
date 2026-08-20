@@ -1,6 +1,10 @@
 import type {
   PokemonDetail,
   PokemonListResponse,
+  BreedingSpecies,
+  BreedingMovesResponse,
+  BreedingPlan,
+  BreedingResult,
 } from './types'
 
 const BASE = '/api'
@@ -8,6 +12,25 @@ const BASE = '/api'
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`)
+  return res.json() as Promise<T>
+}
+
+async function post<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}: ${url}`
+    try {
+      const data = await res.json()
+      if (data?.message) msg = typeof data.message === 'string' ? data.message : msg
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg)
+  }
   return res.json() as Promise<T>
 }
 
@@ -183,6 +206,34 @@ export function listItems(params: {
 
 export function listItemCategories(): Promise<{ id: number; nameZh: string }[]> {
   return get<{ id: number; nameZh: string }[]>(`${BASE}/items/categories`)
+}
+
+export function listBreedingSpecies(): Promise<BreedingSpecies[]> {
+  return get<BreedingSpecies[]>(`${BASE}/breeding/species`)
+}
+
+export function getBreedingMoves(id: string): Promise<BreedingMovesResponse> {
+  return get<BreedingMovesResponse>(`${BASE}/breeding/species/${id}/moves`)
+}
+
+export function postBreedingPlan(body: {
+  targetId: string
+  moves: string[]
+}): Promise<BreedingPlan> {
+  return post<BreedingPlan>(`${BASE}/breeding/plan`, body)
+}
+
+export function postBreedingSimulate(body: {
+  targetId: string
+  moves: string[]
+  motherId: string
+  fatherId: string
+  everstone?: boolean
+  destinyKnot?: boolean
+  motherNature?: string
+  fatherNature?: string
+}): Promise<BreedingResult> {
+  return post<BreedingResult>(`${BASE}/breeding/simulate`, body)
 }
 
 export { get }

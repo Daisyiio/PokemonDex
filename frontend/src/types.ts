@@ -154,3 +154,63 @@ export function normalizeEggGroup(raw: string): string {
   if (name === '未知蛋') name = '未知'
   return name
 }
+
+export interface BreedingBrief {
+  id: string
+  nameZh: string
+  nameEn: string | null
+  image: string | null
+  types: string[]
+  eggGroups: string[]
+  genderRatio: { male: number; female: number }
+  eggCycles: string
+  steps: number | null
+}
+
+export interface BreedingSpecies extends BreedingBrief {
+  breedable: boolean
+  isBaseForm: boolean
+  lineIds: string[]
+}
+
+export interface BreedingEggMove {
+  name: string
+  type: string
+  category: string
+  power: string
+  parents: { id: string | null; name: string }[]
+}
+
+export interface BreedingMovesResponse {
+  target: BreedingBrief
+  eggGroups: string[]
+  breedable: boolean
+  learnable: { name: string; level: string; type: string; category: string; power: string }[]
+  machine: { name: string; type: string; category: string; power: string }[]
+  egg: BreedingEggMove[]
+}
+
+export interface BreedingPlan {
+  target: BreedingBrief
+  line: BreedingBrief[]
+  selfMoveNames: string[]
+  requiredEgg: { name: string; parents: { id: string | null; name: string }[] }[]
+  infeasible: string[]
+  mother: { candidates: BreedingBrief[]; requirement: string; allowsDitto: boolean }
+  father: { candidates: BreedingBrief[]; requirement: string; allowsDitto: boolean }
+}
+
+export interface BreedingResult {
+  child: BreedingBrief
+  gender: string
+  nature: { name: string; raised: string | null; lowered: string | null }
+  ability: { name: string; isHidden: boolean }
+  ivs: { stat: string; key: string; value: number; source: string }[]
+  stats: { stat: string; key: string; base: number; value: number }[]
+  moves: { name: string; method: string; ok: boolean }[]
+  shiny: boolean
+  steps: number | null
+  eggCycles: string
+  mother: BreedingBrief
+  father: BreedingBrief
+}

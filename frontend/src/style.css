@@ -18,6 +18,10 @@
   --text-faint: #bbbbbb;
   --accent: #dc0a2d;
   --accent-soft: rgba(220, 10, 45, 0.1);
+  --ok: #1e8449;
+  --ok-soft: rgba(30, 132, 73, 0.12);
+  --danger: #c0392b;
+  --danger-soft: rgba(192, 57, 43, 0.1);
   --shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
   --shadow-hover: 0 10px 24px rgba(0, 0, 0, 0.12);
   --input-bg: #ffffff;
@@ -63,6 +67,10 @@ html[data-theme='dark'] {
   --text-faint: #6b7380;
   --accent: #ff5a63;
   --accent-soft: rgba(255, 90, 99, 0.16);
+  --ok: #6fce93;
+  --ok-soft: rgba(111, 206, 147, 0.15);
+  --danger: #ff7b74;
+  --danger-soft: rgba(255, 123, 116, 0.15);
   --shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
   --shadow-hover: 0 10px 24px rgba(0, 0, 0, 0.5);
   --input-bg: #14181e;
