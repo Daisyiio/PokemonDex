@@ -80,6 +80,47 @@ export class PokemonService {
     });
   }
 
+  async eggGroups() {
+    const all = await this.prisma.pokemon.findMany({
+      select: { id: true, nameZh: true, nameEn: true, image: true, types: true, detail: true },
+    });
+    const groups = new Map<string, { name: string; members: { id: string; nameZh: string; nameEn: string | null; image: string | null; types: string[] }[] }>();
+    for (const p of all) {
+      const detail = JSON.parse(p.detail);
+      const eggs = (detail.forms?.[0]?.egg_groups || []) as string[];
+      const names = new Set<string>();
+      for (const g of eggs) {
+        const n = this.normalizeEggGroup(g);
+        if (n) names.add(n);
+      }
+      const member = {
+        id: p.id,
+        nameZh: p.nameZh,
+        nameEn: p.nameEn,
+        image: p.image,
+        types: JSON.parse(p.types) as string[],
+      };
+      for (const n of names) {
+        let g = groups.get(n);
+        if (!g) {
+          g = { name: n, members: [] };
+          groups.set(n, g);
+        }
+        g.members.push(member);
+      }
+    }
+    return Array.from(groups.values())
+      .map((g) => ({ name: g.name, count: g.members.length, members: g.members }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  private normalizeEggGroup(raw: string): string {
+    let name = raw.trim();
+    if (name.endsWith('群')) name = name.slice(0, -1);
+    if (name === '未知蛋') name = '未知';
+    return name;
+  }
+
   async detail(id: string) {
     const p = await this.prisma.pokemon.findUnique({ where: { id } });
     if (!p) return null;

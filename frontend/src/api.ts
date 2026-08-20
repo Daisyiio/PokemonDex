@@ -46,6 +46,24 @@ export function listPokemonIds(): Promise<PokemonNavItem[]> {
   return get<PokemonNavItem[]>(`${BASE}/pokemon/ids`)
 }
 
+export interface EggGroupMember {
+  id: string
+  nameZh: string
+  nameEn?: string | null
+  image: string | null
+  types: string[]
+}
+
+export interface EggGroup {
+  name: string
+  count: number
+  members: EggGroupMember[]
+}
+
+export function listEggGroups(): Promise<EggGroup[]> {
+  return get<EggGroup[]>(`${BASE}/pokemon/egg-groups`)
+}
+
 export interface AbilityInfo {
   id: string
   nameZh: string

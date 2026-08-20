@@ -1,9 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { resolveDatasetPath } from '../dataset-path';
 
 export interface AbilityLearner {
   id: string;
@@ -18,25 +15,23 @@ export class AbilityService {
 
   private static learnersCache: Map<string, AbilityLearner[]> | null = null;
 
-  private learners(): Map<string, AbilityLearner[]> {
+  private async learners(): Promise<Map<string, AbilityLearner[]>> {
     if (AbilityService.learnersCache) return AbilityService.learnersCache;
     const map = new Map<string, Map<string, AbilityLearner>>();
-    const base = join(resolveDatasetPath(), 'data', 'pokemon');
-    for (const f of readdirSync(base)) {
-      if (!f.endsWith('.json')) continue;
-      const d = JSON.parse(readFileSync(join(base, f), 'utf8'));
-      const id = d.pokedex_id;
-      const nameZh = d.name_zh;
-      const image = d.forms?.[0]?.image ?? null;
+    const all = await this.prisma.pokemon.findMany({
+      select: { id: true, nameZh: true, image: true, detail: true },
+    });
+    for (const p of all) {
+      const d = JSON.parse(p.detail);
       for (const form of d.forms ?? []) {
         for (const ab of form.abilities ?? []) {
           if (!ab?.name) continue;
           if (!map.has(ab.name)) map.set(ab.name, new Map());
           const bucket = map.get(ab.name)!;
-          if (!bucket.has(id)) {
-            bucket.set(id, { id, nameZh, image, methods: [] });
+          if (!bucket.has(p.id)) {
+            bucket.set(p.id, { id: p.id, nameZh: p.nameZh, image: p.image, methods: [] });
           }
-          const learner = bucket.get(id)!;
+          const learner = bucket.get(p.id)!;
           const method = ab.is_hidden ? '隐藏' : '普通';
           if (!learner.methods.includes(method)) learner.methods.push(method);
         }
@@ -55,7 +50,7 @@ export class AbilityService {
     if (!ability) return null;
     return {
       ...ability,
-      learners: this.learners().get(ability.nameZh) ?? [],
+      learners: (await this.learners()).get(ability.nameZh) ?? [],
     };
   }
 

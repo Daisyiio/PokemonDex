@@ -1,9 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { resolveDatasetPath } from '../dataset-path';
 
 const FULL_WIDTH = '０１２３４５６７８９';
 
@@ -38,13 +35,12 @@ export class MoveService {
 
   private static machinesCache: Map<string, string[]> | null = null;
 
-  private machines(): Map<string, string[]> {
+  private async machines(): Promise<Map<string, string[]>> {
     if (MoveService.machinesCache) return MoveService.machinesCache;
     const map = new Map<string, Set<string>>();
-    const base = join(resolveDatasetPath(), 'data', 'pokemon');
-    for (const f of readdirSync(base)) {
-      if (!f.endsWith('.json')) continue;
-      const d = JSON.parse(readFileSync(join(base, f), 'utf8'));
+    const all = await this.prisma.pokemon.findMany({ select: { detail: true } });
+    for (const p of all) {
+      const d = JSON.parse(p.detail);
       for (const mm of d.machine_moves ?? []) {
         for (const it of mm.data ?? []) {
           if (!it?.name) continue;
@@ -87,7 +83,7 @@ export class MoveService {
         take: sizeNum,
       }),
     ]);
-    const machines = this.machines();
+    const machines = await this.machines();
     return {
       total,
       page: pageNum,
@@ -101,7 +97,7 @@ export class MoveService {
 
   private static learnersCache: Map<string, MoveLearner[]> | null = null;
 
-  private learners(): Map<string, MoveLearner[]> {
+  private async learners(): Promise<Map<string, MoveLearner[]>> {
     if (MoveService.learnersCache) return MoveService.learnersCache;
     const map = new Map<string, Map<string, MoveLearner>>();
     const add = (
@@ -121,26 +117,24 @@ export class MoveService {
         bucket.get(key)!.methods.push(method);
       }
     };
-    const base = join(resolveDatasetPath(), 'data', 'pokemon');
-    for (const f of readdirSync(base)) {
-      if (!f.endsWith('.json')) continue;
-      const d = JSON.parse(readFileSync(join(base, f), 'utf8'));
-      const id = d.pokedex_id;
-      const nameZh = d.name_zh;
-      const image = d.forms?.[0]?.image ?? null;
+    const all = await this.prisma.pokemon.findMany({
+      select: { id: true, nameZh: true, image: true, detail: true },
+    });
+    for (const p of all) {
+      const d = JSON.parse(p.detail);
       for (const mm of d.learnable_moves ?? []) {
         for (const it of mm.data ?? []) {
-          if (it?.name) add(it.name, id, nameZh, image, '升级');
+          if (it?.name) add(it.name, p.id, p.nameZh, p.image, '升级');
         }
       }
       for (const mm of d.machine_moves ?? []) {
         for (const it of mm.data ?? []) {
-          if (it?.name) add(it.name, id, nameZh, image, '机器');
+          if (it?.name) add(it.name, p.id, p.nameZh, p.image, '机器');
         }
       }
       for (const mm of d.egg_moves ?? []) {
         for (const it of mm.data ?? []) {
-          if (it?.name) add(it.name, id, nameZh, image, '蛋');
+          if (it?.name) add(it.name, p.id, p.nameZh, p.image, '蛋');
         }
       }
     }
@@ -157,8 +151,8 @@ export class MoveService {
     if (!move) return null;
     return {
       ...move,
-      machines: this.machines().get(move.nameZh) ?? [],
-      learners: this.learners().get(move.nameZh) ?? [],
+      machines: (await this.machines()).get(move.nameZh) ?? [],
+      learners: (await this.learners()).get(move.nameZh) ?? [],
     };
   }
 }

@@ -147,3 +147,10 @@ export function categoryColor(category: string): string {
 export function imageUrl(subdir: string, name: string): string {
   return `/images/${subdir}/${encodeURIComponent(name)}`
 }
+
+export function normalizeEggGroup(raw: string): string {
+  let name = raw.trim()
+  if (name.endsWith('群')) name = name.slice(0, -1)
+  if (name === '未知蛋') name = '未知'
+  return name
+}

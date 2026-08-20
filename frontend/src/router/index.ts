@@ -7,6 +7,7 @@ import AbilitiesView from '../views/AbilitiesView.vue'
 import AbilityDetailView from '../views/AbilityDetailView.vue'
 import ItemsView from '../views/ItemsView.vue'
 import TypeChartView from '../views/TypeChartView.vue'
+import EggGroupsView from '../views/EggGroupsView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -58,6 +59,12 @@ const router = createRouter({
       name: 'type-chart',
       component: TypeChartView,
       meta: { title: '属性克制' },
+    },
+    {
+      path: '/egg-groups',
+      name: 'egg-groups',
+      component: EggGroupsView,
+      meta: { title: '蛋组图鉴' },
     },
   ],
   scrollBehavior(_to, _from, savedPosition) {

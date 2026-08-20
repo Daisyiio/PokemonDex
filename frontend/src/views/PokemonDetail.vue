@@ -15,6 +15,7 @@ import type {
   EvolutionNode,
   PokedexEntry,
 } from '../types'
+import { normalizeEggGroup } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -462,7 +463,17 @@ function genderText(r: { male: number; female: number } | undefined): string {
         </div>
         <div class="info-item">
           <span class="info-label">蛋群</span>
-          <span class="info-value">{{ form()!.egg_groups.length ? form()!.egg_groups.join(' / ') : '—' }}</span>
+          <span v-if="form()!.egg_groups.length" class="info-value egg-value">
+            <router-link
+              v-for="eg in form()!.egg_groups"
+              :key="eg"
+              :to="`/egg-groups?group=${normalizeEggGroup(eg)}`"
+              class="egg-link"
+            >
+              {{ normalizeEggGroup(eg) }}
+            </router-link>
+          </span>
+          <span v-else class="info-value">—</span>
         </div>
         <div class="info-item">
           <span class="info-label">孵蛋步数</span>
@@ -1062,6 +1073,26 @@ function genderText(r: { male: number; female: number } | undefined): string {
   font-weight: 600;
   color: var(--text);
   word-break: break-word;
+}
+.egg-value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.egg-link {
+  color: var(--accent);
+  text-decoration: none;
+  border: 1px solid var(--accent-soft);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+.egg-link:hover {
+  background: var(--accent);
+  color: #fff;
 }
 .shape-value {
   display: flex;

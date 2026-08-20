@@ -26,6 +26,11 @@ export class PokemonController {
     return this.pokemonService.ids();
   }
 
+  @Get('egg-groups')
+  eggGroups() {
+    return this.pokemonService.eggGroups();
+  }
+
   @Get(':id')
   detail(@Param('id') id: string) {
     return this.pokemonService.detail(id);
