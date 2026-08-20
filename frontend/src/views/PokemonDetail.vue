@@ -26,6 +26,7 @@ const activeTab = ref<'moves' | 'machine' | 'egg'>('moves')
 const openDexGen = ref(0)
 const navList = ref<PokemonNavItem[]>([])
 const abilityMap = ref<Record<string, string>>({})
+const abilityIdMap = ref<Record<string, string>>({})
 
 const navIndex = computed(() =>
   navList.value.findIndex((n) => n.id === route.params.id)
@@ -65,18 +66,21 @@ const statColors: Record<string, string> = {
 
 async function loadAbilities(names: string[]) {
   const map: Record<string, string> = {}
+  const mapId: Record<string, string> = {}
   await Promise.all(
     names.map(async (name) => {
       try {
         const res = await listAbilities({ search: name })
         const hit = res.items.find((a) => a.nameZh === name) || res.items[0]
         if (hit?.description) map[name] = hit.description
+        if (hit?.id) mapId[name] = hit.id
       } catch {
         /* ignore */
       }
     })
   )
   abilityMap.value = map
+  abilityIdMap.value = mapId
 }
 
 async function load() {
@@ -375,7 +379,8 @@ function genderText(r: { male: number; female: number } | undefined): string {
           <div class="ability-item" v-for="a in form()!.abilities" :key="a.name">
             <div class="ability-head">
               <span class="ability-name" :class="{ hidden: a.is_hidden }">
-                {{ a.name }}
+                <router-link v-if="abilityIdMap[a.name]" :to="`/abilities/${abilityIdMap[a.name]}`" class="ability-link">{{ a.name }}</router-link>
+                <span v-else>{{ a.name }}</span>
               </span>
               <span v-if="a.is_hidden" class="hidden-tag">隐藏特性</span>
             </div>
@@ -888,6 +893,14 @@ function genderText(r: { male: number; female: number } | undefined): string {
 .ability-name.hidden {
   background: var(--ability-hidden-bg);
   color: var(--ability-hidden-text);
+}
+.ability-link {
+  color: inherit;
+  text-decoration: none;
+}
+.ability-link:hover {
+  text-decoration: underline;
+  opacity: 0.85;
 }
 .hidden-tag {
   font-size: 11px;
