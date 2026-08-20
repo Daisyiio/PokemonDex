@@ -205,7 +205,7 @@ onMounted(async () => {
           <div class="rc-eg">共享蛋组：{{ plan.combinedDirect.sharedEggGroup }}</div>
           <div v-if="plan.combinedDirect.learnInfo" class="rc-learn">
             <span v-for="li in plan.combinedDirect.learnInfo" :key="li.move" class="learn-tag">
-              {{ li.move }}：{{ li.level === '—' ? '初始' : 'Lv.' + li.level }}
+              {{ li.move }}：{{ !li.level || li.level === '?' ? '习得等级未知' : li.level === '—' ? '初始' : 'Lv.' + li.level }}
             </span>
           </div>
           <div class="rc-note">父方需先习得上述招式，放入饲育屋后子代{{ plan.target.nameZh }}自带全部所选蛋招式</div>
@@ -257,7 +257,7 @@ onMounted(async () => {
               其他候选父本：
               <span v-for="c in sol.candidates.slice(1)" :key="c.id" class="cand-tag">
                 <router-link :to="`/pokemon/${c.id}`" class="rc-link">{{ c.nameZh }}</router-link>
-                <span class="cand-lv">{{ c.learnLevel === '—' ? '初始' : 'Lv.' + c.learnLevel }}</span>
+                <span class="cand-lv">{{ !c.learnLevel || c.learnLevel === '?' ? '习得等级未知' : c.learnLevel === '—' ? '初始' : 'Lv.' + c.learnLevel }}</span>
               </span>
             </div>
           </div>
