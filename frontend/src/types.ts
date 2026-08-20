@@ -276,4 +276,21 @@ export interface GeneticsPlan {
     moves: string[]
     learnInfo?: { move: string; level: string }[]
   }
+  unifiedPlan?: {
+    type: string
+    totalSteps?: number
+    steps: {
+      phase: string
+      move?: string
+      father: GeneticsBrief
+      mother: GeneticsBrief
+      offspring: GeneticsBrief
+      sharedEggGroup: string
+      learnLevel?: string
+      note: string
+    }[]
+    impossibleMoves?: { move: string; reason: string }[]
+    knownMoves?: string[]
+    note?: string
+  }
 }

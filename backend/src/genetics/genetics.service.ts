@@ -218,12 +218,105 @@ export class GeneticsService {
       specialNote = `${target.nameZh} 全部为雄性，无法作为母本进行孵蛋遗传蛋招式。`;
     }
 
+    const unifiedPlan = this.buildUnifiedPlan(moves, target, generation, moveResults, isAllMale, isGenderless);
+
     return {
       target: this.info(target),
       generation,
       specialNote,
       moveResults,
       combinedDirect,
+      unifiedPlan,
+    };
+  }
+
+  private buildUnifiedPlan(
+    moves: string[],
+    target: SpeciesInfo,
+    generation: number,
+    moveResults: any[],
+    isAllMale: boolean,
+    isGenderless: boolean,
+  ): any | null {
+    if (moves.length <= 1) return null;
+    if (isAllMale || isGenderless) return null;
+
+    // Gen 5-: mother can't pass egg moves, so sequential stacking doesn't work
+    if (generation < 6) {
+      return {
+        type: 'gen5-limit',
+        note: '在第5世代及更早，只有父方可以传递蛋招式，母方无法将已遗传的招式继续传递给后代。无法通过顺序叠加同时遗传多个蛋招式，请寻找一个同时学会所有招式的父方，或逐个获取。',
+        steps: [],
+        impossibleMoves: [],
+      };
+    }
+
+    const impossible: { move: string; reason: string }[] = [];
+    const allSteps: any[] = [];
+    const knownMoves: string[] = [];
+
+    for (const move of moves) {
+      const mr = moveResults.find((r) => r.move === move);
+      if (!mr?.valid || !mr.solutions || mr.solutions.length === 0) {
+        impossible.push({ move, reason: mr?.reason || '无可用遗传路径' });
+        continue;
+      }
+
+      const directSol = mr.solutions.find((s) => s.type === 'direct');
+      if (directSol && directSol.candidates?.length > 0) {
+        // Direct father: one stacking step
+        const fatherInfo = directSol.candidates[0];
+        const father = GeneticsService.byId!.get(fatherInfo.id)!;
+        const level = this.getLearnLevel(father.id, move);
+        const eg = this.sharesEggGroup(father, target) || '?';
+        knownMoves.push(move);
+        const prevMoves = knownMoves.length > 1 ? `（母方已携带${knownMoves.slice(0, -1).join('、')}）` : '';
+        allSteps.push({
+          phase: 'stacking',
+          move,
+          father: fatherInfo,
+          mother: this.info(target),
+          offspring: this.info(target),
+          sharedEggGroup: eg,
+          learnLevel: level,
+          note: `父方${father.nameZh}${this.levelText(level)}「${move}」${prevMoves}，放入饲育屋，子代${target.nameZh}携带${knownMoves.join('、')}`,
+        });
+      } else {
+        // Chain: use chain steps (last step is the stacking step)
+        const chainSol = mr.solutions.find((s) => s.type === 'chain');
+        if (!chainSol) {
+          impossible.push({ move, reason: '无可用遗传路径' });
+          continue;
+        }
+        for (let i = 0; i < chainSol.steps.length; i++) {
+          const step = chainSol.steps[i];
+          const isLast = i === chainSol.steps.length - 1;
+          if (isLast) {
+            knownMoves.push(move);
+            const prevMoves = knownMoves.length > 1 ? `（母方已携带${knownMoves.slice(0, -1).join('、')}）` : '';
+            allSteps.push({
+              ...step,
+              phase: 'chain-final',
+              move,
+              note: `公的${step.father.nameZh}（携带「${move}」）${prevMoves}× 母的${step.mother.nameZh} → 子代${target.nameZh}，携带${knownMoves.join('、')}`,
+            });
+          } else {
+            allSteps.push({ ...step, phase: 'chain-prep', move });
+          }
+        }
+      }
+    }
+
+    if (allSteps.length === 0) {
+      return { type: 'impossible', steps: [], impossibleMoves: impossible, note: '所有招式均无法遗传。' };
+    }
+
+    return {
+      type: allSteps.some((s) => s.phase === 'chain-prep' || s.phase === 'chain-final') ? 'mixed' : 'sequential',
+      totalSteps: allSteps.length,
+      steps: allSteps,
+      impossibleMoves: impossible,
+      knownMoves,
     };
   }
 

@@ -186,8 +186,49 @@ onMounted(async () => {
     <div v-if="plan" class="results">
       <div v-if="plan.specialNote" class="special-note">{{ plan.specialNote }}</div>
 
-      <!-- 合并方案 -->
-      <div v-if="plan.combinedDirect && !plan.specialNote" class="result-card combined">
+      <!-- 统一方案（多招式时主输出） -->
+      <div v-if="plan.unifiedPlan" class="unified-plan">
+        <div v-if="plan.unifiedPlan.type === 'gen5-limit'" class="gen5-note">
+          {{ plan.unifiedPlan.note }}
+        </div>
+        <template v-else>
+          <div class="up-head">
+            <span class="up-badge">{{ plan.unifiedPlan.type === 'mixed' ? '混合遗传方案' : '顺序叠加方案' }}</span>
+            <span class="up-title">共 {{ plan.unifiedPlan.totalSteps }} 步完成全部 {{ plan.unifiedPlan.knownMoves?.length || 0 }} 个蛋招式</span>
+          </div>
+
+          <div v-for="(step, si) in plan.unifiedPlan.steps" :key="si" class="up-step" :class="step.phase">
+            <div class="up-step-num">
+              <span v-if="step.phase === 'chain-prep'">🔗 连锁准备 · 第{{ si + 1 }}步</span>
+              <span v-else>第{{ si + 1 }}步</span>
+              <span v-if="step.move" class="up-move-tag">{{ step.move }}</span>
+            </div>
+            <div class="up-step-body">
+              <span class="rc-role">父</span>
+              <router-link :to="`/pokemon/${step.father.id}`" class="rc-link">{{ step.father.nameZh }}</router-link>
+              <span class="rc-gender">♂</span>
+              <span class="rc-x">×</span>
+              <span class="rc-role">母</span>
+              <router-link :to="`/pokemon/${step.mother.id}`" class="rc-link">{{ step.mother.nameZh }}</router-link>
+              <span v-if="step.mother.genderRatio.female > 0" class="rc-gender">♀</span>
+              <span v-else class="rc-gender">⚲</span>
+            </div>
+            <div class="up-step-eg">共享蛋组：{{ step.sharedEggGroup }}</div>
+            <div class="up-step-note">{{ step.note }}</div>
+          </div>
+
+          <div v-if="plan.unifiedPlan.impossibleMoves && plan.unifiedPlan.impossibleMoves.length > 0" class="up-impossible">
+            <div v-for="im in plan.unifiedPlan.impossibleMoves" :key="im.move" class="up-impossible-item">
+              <span class="rc-badge no">不可遗传</span> {{ im.move }}：{{ im.reason }}
+            </div>
+          </div>
+
+          <div class="up-tip">💡 说明：顺序叠加利用第6世代起「父母双方均可传递蛋招式」的规则——母方把已学会的招式传给子代，父方每次新增一个招式。需注意目标宝可梦性别比例，雌性概率较低时可能需要多次尝试。</div>
+        </template>
+      </div>
+
+      <!-- 一站式方案（无统一方案时显示） -->
+      <div v-else-if="plan.combinedDirect && !plan.specialNote && selectedMoves.length > 1" class="result-card combined">
         <div class="rc-head">
           <span class="rc-badge ok">一站式方案</span>
           <span class="rc-title">一个父方即可遗传全部招式</span>
@@ -218,51 +259,48 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- 逐招式结果 -->
-      <div v-for="mr in plan.moveResults" :key="mr.move" class="result-card" :class="{ bad: !mr.valid }">
-        <div class="rc-head">
-          <span class="rc-badge" :class="mr.valid ? 'ok' : 'no'">{{ mr.valid ? '蛋招式' : '不可遗传' }}</span>
-          <span class="rc-title">{{ mr.move }}</span>
-        </div>
-
-        <div v-if="!mr.valid" class="rc-reason">{{ mr.reason }}</div>
-
-        <div v-else-if="mr.reason && (!mr.solutions || mr.solutions.length === 0)" class="rc-reason">{{ mr.reason }}</div>
-
-        <div v-else>
-          <div v-for="(sol, si) in mr.solutions" :key="si" class="solution">
-            <div class="sol-head">
-              <span class="sol-badge" :class="sol.type === 'direct' ? 'ok' : 'chain'">
-                {{ sol.type === 'direct' ? '直接孵蛋方案（一步完成）' : `连锁遗传（${sol.stepCount}步完成）` }}
-              </span>
-            </div>
-
-            <div v-for="(step, ti) in sol.steps" :key="ti" class="step">
-              <div class="step-num">第{{ ti + 1 }}步</div>
-              <div class="step-body">
-                <span class="rc-role">父</span>
-                <router-link :to="`/pokemon/${step.father.id}`" class="rc-link">{{ step.father.nameZh }}</router-link>
-                <span class="rc-gender">♂</span>
-                <span class="rc-x">×</span>
-                <span class="rc-role">母</span>
-                <router-link :to="`/pokemon/${step.mother.id}`" class="rc-link">{{ step.mother.nameZh }}</router-link>
-                <span v-if="step.mother.genderRatio.female > 0" class="rc-gender">♀</span>
-                <span v-else class="rc-gender">⚲</span>
+      <!-- 单招式结果 -->
+      <template v-if="!plan.unifiedPlan && selectedMoves.length <= 1">
+        <div v-for="mr in plan.moveResults" :key="mr.move" class="result-card" :class="{ bad: !mr.valid }">
+          <div class="rc-head">
+            <span class="rc-badge" :class="mr.valid ? 'ok' : 'no'">{{ mr.valid ? '蛋招式' : '不可遗传' }}</span>
+            <span class="rc-title">{{ mr.move }}</span>
+          </div>
+          <div v-if="!mr.valid" class="rc-reason">{{ mr.reason }}</div>
+          <div v-else-if="mr.reason && (!mr.solutions || mr.solutions.length === 0)" class="rc-reason">{{ mr.reason }}</div>
+          <div v-else>
+            <div v-for="(sol, si) in mr.solutions" :key="si" class="solution">
+              <div class="sol-head">
+                <span class="sol-badge" :class="sol.type === 'direct' ? 'ok' : 'chain'">
+                  {{ sol.type === 'direct' ? '直接孵蛋方案（一步完成）' : `连锁遗传（${sol.stepCount}步完成）` }}
+                </span>
               </div>
-              <div class="step-eg">共享蛋组：{{ step.sharedEggGroup }}</div>
-              <div class="step-note">{{ step.note }}</div>
-            </div>
-
-            <div v-if="sol.type === 'direct' && sol.candidates && sol.candidates.length > 1" class="sol-cands">
-              其他候选父本：
-              <span v-for="c in sol.candidates.slice(1)" :key="c.id" class="cand-tag">
-                <router-link :to="`/pokemon/${c.id}`" class="rc-link">{{ c.nameZh }}</router-link>
-                <span class="cand-lv">{{ !c.learnLevel || c.learnLevel === '?' ? '习得等级未知' : c.learnLevel === '—' ? '初始' : 'Lv.' + c.learnLevel }}</span>
-              </span>
+              <div v-for="(step, ti) in sol.steps" :key="ti" class="step">
+                <div class="step-num">第{{ ti + 1 }}步</div>
+                <div class="step-body">
+                  <span class="rc-role">父</span>
+                  <router-link :to="`/pokemon/${step.father.id}`" class="rc-link">{{ step.father.nameZh }}</router-link>
+                  <span class="rc-gender">♂</span>
+                  <span class="rc-x">×</span>
+                  <span class="rc-role">母</span>
+                  <router-link :to="`/pokemon/${step.mother.id}`" class="rc-link">{{ step.mother.nameZh }}</router-link>
+                  <span v-if="step.mother.genderRatio.female > 0" class="rc-gender">♀</span>
+                  <span v-else class="rc-gender">⚲</span>
+                </div>
+                <div class="step-eg">共享蛋组：{{ step.sharedEggGroup }}</div>
+                <div class="step-note">{{ step.note }}</div>
+              </div>
+              <div v-if="sol.type === 'direct' && sol.candidates && sol.candidates.length > 1" class="sol-cands">
+                其他候选父本：
+                <span v-for="c in sol.candidates.slice(1)" :key="c.id" class="cand-tag">
+                  <router-link :to="`/pokemon/${c.id}`" class="rc-link">{{ c.nameZh }}</router-link>
+                  <span class="cand-lv">{{ !c.learnLevel || c.learnLevel === '?' ? '习得等级未知' : c.learnLevel === '—' ? '初始' : 'Lv.' + c.learnLevel }}</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </template>
     </div>
   </div>
 </template>
@@ -504,6 +542,90 @@ onMounted(async () => {
 .cand-lv { font-size: 10px; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 6px; }
 .rc-learn { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .learn-tag { font-size: 11px; color: var(--ok); background: var(--ok-soft); border-radius: 999px; padding: 2px 8px; }
+
+.unified-plan {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.up-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.up-badge {
+  font-size: 13px;
+  font-weight: 800;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.up-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.up-step {
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--surface-2);
+  border-radius: 0 8px 8px 0;
+}
+.up-step.chain-prep {
+  border-left-color: var(--text-3);
+  background: var(--surface);
+}
+.up-step-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.up-step.chain-prep .up-step-num { color: var(--text-3); }
+.up-move-tag {
+  font-size: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.up-step-body {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.up-step-eg { font-size: 12px; color: var(--text-3); margin: 4px 0; }
+.up-step-note { font-size: 12px; color: var(--text-3); line-height: 1.5; }
+.up-impossible {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--danger-soft);
+}
+.up-impossible-item { font-size: 13px; color: var(--danger); margin-bottom: 4px; }
+.up-tip {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.6;
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.gen5-note {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.7;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
 .sk-card {
   height: 120px;
   border-radius: 12px;
