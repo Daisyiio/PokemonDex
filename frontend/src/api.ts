@@ -246,7 +246,7 @@ export function listGeneticsSpecies(): Promise<GeneticsBrief[]> {
 }
 
 export function getGeneticsEggMoves(id: string): Promise<GeneticsEggMovesResponse> {
-  return get<GeneticsEggMovesResponse>(`${BASE}/genetics/species/${id}/moves`)
+  return get<GeneticsEggMovesResponse>(`${BASE}/genetics/species/${id}/egg-moves`)
 }
 
 export function postGeneticsPlan(body: {
