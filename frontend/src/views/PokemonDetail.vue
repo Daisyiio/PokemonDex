@@ -22,7 +22,7 @@ const router = useRouter()
 const detail = ref<PokemonDetail | null>(null)
 const error = ref('')
 const activeForm = ref(0)
-const activeTab = ref<'moves' | 'machine' | 'egg'>('moves')
+const activeTab = ref<'moves' | 'machine' | 'egg' | 'tutor'>('moves')
 const openDexGen = ref(0)
 const navList = ref<PokemonNavItem[]>([])
 const abilityMap = ref<Record<string, string>>({})
@@ -233,11 +233,14 @@ const MOVE_KEYS = {
 
 const activeMoves = () => {
   if (!detail.value) return []
+  if (activeTab.value === 'tutor' && moveGen.value === 9) return []
+  if (activeTab.value === 'tutor') return genMovesData.value?.tutor?.map((m) => ({ name: m.name, level: '', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' })) || []
   if (moveGen.value !== 9 && genMovesData.value) {
     const tab = activeTab.value
     if (tab === 'moves') return genMovesData.value.learnable.map((m) => ({ name: m.name, level: m.level || '—', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
     if (tab === 'machine') return genMovesData.value.machine.map((m) => ({ name: m.name, level: '', machine: m.tm || '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
     if (tab === 'egg') return genMovesData.value.egg.map((m) => ({ name: m.name, level: '蛋', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
+    if (tab === 'tutor') return genMovesData.value.tutor.map((m) => ({ name: m.name, level: '', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
   }
   const data = detail.value[MOVE_KEYS[activeTab.value]] as { form: string; data: MoveEntry[] }[]
   const list = data.find((d) => d.form === form()?.name)
@@ -635,12 +638,17 @@ function basePointsText(list: Form['base_points'] | undefined): string {
         <button :class="{ active: activeTab === 'egg' }" @click="activeTab = 'egg'">
           蛋招式
         </button>
+        <button v-if="moveGen !== 9" :class="{ active: activeTab === 'tutor' }" @click="activeTab = 'tutor'">
+          教授招式
+        </button>
       </div>
-      <div class="table-wrap" :class="{ 'is-machine': activeTab === 'machine' }">
+      <div class="table-wrap" :class="{ 'is-machine': activeTab === 'machine' || activeTab === 'tutor' }">
         <table class="moves-table">
           <thead>
             <tr>
-              <th>{{ activeTab === 'machine' ? '学习器' : '等级' }}</th>
+              <th v-if="activeTab === 'machine'">学习器</th>
+              <th v-else-if="activeTab === 'tutor'">—</th>
+              <th v-else>等级</th>
               <th>名称</th>
               <th>属性</th>
               <th>分类</th>
@@ -651,7 +659,7 @@ function basePointsText(list: Form['base_points'] | undefined): string {
           </thead>
           <tbody>
             <tr v-for="m in activeMoves()" :key="m.name + m.level + m.machine">
-              <td class="num">{{ m.machine || m.level || '—' }}</td>
+              <td class="num">{{ activeTab === 'tutor' ? '—' : (m.machine || m.level || '—') }}</td>
               <td class="move-name">{{ m.name }}</td>
               <td>
                 <span class="type-badge" :style="{ background: typeColor(m.type) }">

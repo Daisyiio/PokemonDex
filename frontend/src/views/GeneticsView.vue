@@ -42,7 +42,7 @@ async function pickTarget(id: string) {
   error.value = ''
   movesLoading.value = true
   try {
-    eggMovesData.value = await getGeneticsEggMoves(id, generation.value <= 5 ? 5 : undefined)
+    eggMovesData.value = await getGeneticsEggMoves(id, generation.value <= 8 ? generation.value : undefined)
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -171,8 +171,14 @@ onMounted(async () => {
         <div class="gen-select">
           <span class="gen-label">世代规则</span>
           <select v-model="generation" class="gen-dropdown">
-            <option :value="5">第5世代及更早（仅父方传递）</option>
-            <option :value="6">第6~9世代（父母双方均可传递）</option>
+            <option :value="2">第2世代（仅父方传递）</option>
+            <option :value="3">第3世代（仅父方传递）</option>
+            <option :value="4">第4世代（仅父方传递）</option>
+            <option :value="5">第5世代（仅父方传递）</option>
+            <option :value="6">第6世代（父母双方均可传递）</option>
+            <option :value="7">第7世代（父母双方均可传递）</option>
+            <option :value="8">第8世代（父母双方均可传递）</option>
+            <option :value="9">第9世代（父母双方均可传递）</option>
           </select>
         </div>
 

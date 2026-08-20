@@ -195,19 +195,17 @@ export class GeneticsService {
   }
 
   private getEggMapForGen(targetId: string, generation: number): Map<string, any> {
-    if (generation >= 6) {
+    if (generation >= 9 || generation < 2) {
       return GeneticsService.eggMovesBySpecies!.get(targetId) || new Map();
     }
-    const gen = generation <= 5 ? '5' : String(generation);
-    return GeneticsService.eggMovesByGen?.get(gen)?.get(targetId) || new Map();
+    return GeneticsService.eggMovesByGen?.get(String(generation))?.get(targetId) || new Map();
   }
 
   private getReceiversForGen(move: string, generation: number): Set<string> {
-    if (generation >= 6) {
+    if (generation >= 9 || generation < 2) {
       return GeneticsService.moveToEggReceivers!.get(move) || new Set();
     }
-    const gen = generation <= 5 ? '5' : String(generation);
-    return GeneticsService.eggReceiversByGen?.get(gen)?.get(move) || new Set();
+    return GeneticsService.eggReceiversByGen?.get(String(generation))?.get(move) || new Set();
   }
 
   private info(s: SpeciesInfo) {
