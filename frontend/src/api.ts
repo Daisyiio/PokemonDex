@@ -245,8 +245,9 @@ export function listGeneticsSpecies(): Promise<GeneticsBrief[]> {
   return get<GeneticsBrief[]>(`${BASE}/genetics/species`)
 }
 
-export function getGeneticsEggMoves(id: string): Promise<GeneticsEggMovesResponse> {
-  return get<GeneticsEggMovesResponse>(`${BASE}/genetics/species/${id}/egg-moves`)
+export function getGeneticsEggMoves(id: string, gen?: number): Promise<GeneticsEggMovesResponse> {
+  const q = gen ? `?gen=${gen}` : ''
+  return get<GeneticsEggMovesResponse>(`${BASE}/genetics/species/${id}/egg-moves${q}`)
 }
 
 export function postGeneticsPlan(body: {
@@ -255,4 +256,16 @@ export function postGeneticsPlan(body: {
   generation: number
 }): Promise<GeneticsPlan> {
   return post<GeneticsPlan>(`${BASE}/genetics/plan`, body)
+}
+
+export interface MovesByGenResponse {
+  generation: number
+  learnable: { name: string; level: string; type: string; category: string; power: string; accuracy: string; pp: string }[]
+  machine: { name: string; tm: string; type: string; category: string; power: string; accuracy: string; pp: string }[]
+  egg: { name: string; type: string; category: string; power: string; accuracy: string; pp: string; parents: { id: string | null; name: string }[] }[]
+  tutor: { name: string; type: string; category: string; power: string; accuracy: string; pp: string }[]
+}
+
+export function getMovesByGen(id: string, gen: number): Promise<MovesByGenResponse> {
+  return get<MovesByGenResponse>(`${BASE}/genetics/species/${id}/all-moves?gen=${gen}`)
 }

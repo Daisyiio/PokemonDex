@@ -42,7 +42,7 @@ async function pickTarget(id: string) {
   error.value = ''
   movesLoading.value = true
   try {
-    eggMovesData.value = await getGeneticsEggMoves(id)
+    eggMovesData.value = await getGeneticsEggMoves(id, generation.value <= 5 ? 5 : undefined)
   } catch (e) {
     error.value = (e as Error).message
   } finally {

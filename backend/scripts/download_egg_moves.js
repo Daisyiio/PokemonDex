@@ -1,16 +1,12 @@
 #!/usr/bin/env node
 /**
- * 52poke 蛋招式数据批量下载脚本
+ * 52poke 全招式数据批量下载脚本 (升级/学习器/蛋招式/教授招式)
  *
- * 安全策略:
- *   - MediaWiki API (api.php) 而非爬 HTML
- *   - 批量获取 50 页/请求
- *   - 每 5 秒 1 个请求
- *   - 总请求数 ~154, 总耗时 ~13 分钟
+ * 安全策略: MediaWiki API + 批量50页/请求 + 5秒间隔
  *
  * 用法:
- *   node scripts/download_egg_moves.js           # 全量下载 Gen2-8
- *   node scripts/download_egg_moves.js --test   # 测试模式(仅 Gen2 前10页)
+ *   node scripts/download_egg_moves.js          # 全量 Gen2-8
+ *   node scripts/download_egg_moves.js --test   # 测试模式(Gen2前10页)
  */
 
 const fs = require('fs');
@@ -36,18 +32,14 @@ function padId(id) {
 
 async function apiGet(params) {
   const url = API + '?' + new URLSearchParams({ format: 'json', ...params }).toString();
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let i = 0; i < 3; i++) {
     try {
       const r = await fetch(url, { headers: { 'User-Agent': UA } });
-      if (r.status === 429) {
-        console.log('  429 限速, 等待 30s...');
-        await sleep(30000);
-        continue;
-      }
+      if (r.status === 429) { console.log('  429, 等待30s...'); await sleep(30000); continue; }
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return await r.json();
     } catch (e) {
-      if (attempt < 2) { console.log(`  重试(${attempt+1}/3): ${e.message}`); await sleep(10000); }
+      if (i < 2) { console.log(`  重试: ${e.message}`); await sleep(10000); }
       else throw e;
     }
   }
@@ -55,113 +47,142 @@ async function apiGet(params) {
 
 async function apiPost(params) {
   const body = new URLSearchParams({ format: 'json', ...params });
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let i = 0; i < 3; i++) {
     try {
       const r = await fetch(API, {
         method: 'POST',
         headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded' },
         body,
       });
-      if (r.status === 429) {
-        console.log('  429 限速, 等待 30s...');
-        await sleep(30000);
-        continue;
-      }
+      if (r.status === 429) { console.log('  429, 等待30s...'); await sleep(30000); continue; }
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return await r.json();
     } catch (e) {
-      if (attempt < 2) { console.log(`  重试(${attempt+1}/3): ${e.message}`); await sleep(10000); }
+      if (i < 2) { console.log(`  重试: ${e.message}`); await sleep(10000); }
       else throw e;
     }
   }
 }
 
 /**
- * 解析 wikitext 蛋招式部分
+ * 解析招式字段 (通用)
+ * Gen2-4: name|type|power|accuracy|pp (无category)
+ * Gen5+:  name|type|category|power|accuracy|pp
  */
-function parseEggMoves(content) {
-  // 从 {{招式表间链接|小锯鳄|158|2|水|水}} 提取编号和名称
+function parseMoveFields(fields, hasCategory) {
+  if (fields.length < 2) return null;
+  const m = { name: fields[0].trim(), type: fields[1].trim() };
+  if (hasCategory) {
+    m.category = (fields[2] || '').trim();
+    m.power = (fields[3] || '').trim();
+    m.accuracy = (fields[4] || '').trim();
+    m.pp = (fields[5] || '').trim();
+  } else {
+    m.category = '';
+    m.power = (fields[2] || '').trim();
+    m.accuracy = (fields[3] || '').trim();
+    m.pp = (fields[4] || '').trim();
+  }
+  return m;
+}
+
+/**
+ * 解析一个区域的所有行
+ * sectionType: 'level' | 'tm' | 'tutor' | 'egg'
+ */
+function parseSection(content, sectionType, hasCategory) {
+  // 定位区域: sectionType + 'h' 到 sectionType + 'f'
+  const hTag = `learnlist/${sectionType}h`;
+  const fTag = `learnlist/${sectionType}f`;
+  const start = content.indexOf(hTag);
+  const end = content.indexOf(fTag);
+  if (start < 0 || end < 0) return [];
+
+  const section = content.substring(start, end);
+  const results = [];
+
+  for (const line of section.split('\n')) {
+    // 匹配 {{learnlist/sectionTypeN|CONTENT}}
+    if (!line.includes(`learnlist/${sectionType}`) || line.includes(`${sectionType}h`) || line.includes(`${sectionType}f`)) continue;
+    const m = line.match(/\{\{learnlist\/[^|]+\|(.+)\}\}\s*$/);
+    if (!m) continue;
+    const inner = m[1];
+
+    if (sectionType === 'breed') {
+      // 蛋招式: 先解析父方模板, 剩余是 move fields
+      let parents = [];
+      let lastEnd = 0;
+      const mspRe = /\{\{(MSPN?)\|([^}]*)\}\}/g;
+      let msp;
+      while ((msp = mspRe.exec(inner)) !== null) {
+        const [mspType, mspContent] = [msp[1], msp[2]];
+        if (mspType === 'MSP') {
+          const parts = mspContent.split('|').filter(p => p.trim());
+          if (parts.length >= 2) parents.push({ id: padId(parts[0]), name: parts[1].trim() });
+          else if (parts.length === 1 && padId(parts[0]) !== '0000') parents.push({ id: padId(parts[0]), name: '' });
+        } else {
+          for (const pair of mspContent.split(',')) {
+            const seg = pair.split(/[\\|]/);
+            if (seg.length >= 2 && seg[0].trim() && seg[1].trim()) parents.push({ id: padId(seg[0]), name: seg[1].trim() });
+          }
+        }
+        lastEnd = msp.index + msp[0].length;
+      }
+      const afterParents = inner.substring(lastEnd).replace(/^(<br>)?\|?/, '');
+      const fields = afterParents.split('|').map(s => s.trim()).filter(s => s && s !== "'''");
+      const move = parseMoveFields(fields, hasCategory);
+      if (move) { move.parents = parents; results.push(move); }
+    } else if (sectionType === 'level' || sectionType === 'tm') {
+      // 升级/学习器: 第一个字段是 level/tm, 剩余是 move fields
+      const fields = inner.split('|').map(s => s.trim()).filter(s => s && s !== "'''");
+      if (fields.length < 3) continue;
+      const extra = fields[0]; // level or tm name
+      const move = parseMoveFields(fields.slice(1), hasCategory);
+      if (move) {
+        if (sectionType === 'level') move.level = extra;
+        else move.tm = extra;
+        results.push(move);
+      }
+    } else {
+      // 教授招式: 直接是 move fields
+      const fields = inner.split('|').map(s => s.trim()).filter(s => s && s !== "'''");
+      const move = parseMoveFields(fields, hasCategory);
+      if (move) results.push(move);
+    }
+  }
+
+  return results;
+}
+
+function parsePage(title, content) {
   const headerMatch = content.match(/\{\{招式表间链接\|([^|]+)\|(\d+)\|/);
   if (!headerMatch) return null;
   const nameZh = headerMatch[1].trim();
   const dexId = padId(headerMatch[2]);
 
-  // 定位蛋招式区域
-  const breedStart = content.indexOf('learnlist/breedh');
-  const breedEnd = content.indexOf('learnlist/breedf');
-  if (breedStart < 0 || breedEnd < 0) return { id: dexId, nameZh, eggMoves: [] };
+  // 检测模板版本 (level2=Gen2, level5=Gen5, etc.)
+  const lvMatch = content.match(/learnlist\/level(\d)/);
+  const version = lvMatch ? parseInt(lvMatch[1]) : 5;
+  const hasCategory = version >= 5;
 
-  const section = content.substring(breedStart, breedEnd);
-  const moves = [];
-
-  for (const line of section.split('\n')) {
-    // 匹配 breed2/breed3/... 行 (排除 breedh 和 breedf)
-    if (!line.includes('learnlist/breed') || line.includes('breedh') || line.includes('breedf')) continue;
-
-    // 提取 {{learnlist/breedN|...}} 的内容 (贪婪匹配到行尾的 }})
-    const m = line.match(/\{\{learnlist\/breed[^|]*\|(.+)\}\}\s*$/);
-    if (!m) continue;
-    const inner = m[1];
-
-    // 解析父方: {{MSP|001|妙蛙种子}} 或 {{MSPN|034\尼多王,104\卡拉卡拉,...}}
-    let parents = [];
-    const mspMatch = inner.match(/\{\{(MSPN?)\|([^}]*)\}\}/);
-    if (mspMatch) {
-      const mspType = mspMatch[1];
-      const mspContent = mspMatch[2];
-      if (mspType === 'MSP') {
-        // 单只父方: 001|妙蛙种子 或 000(无名称=活动/特殊)
-        const parts = mspContent.split('|').filter(p => p.trim());
-        if (parts.length >= 2) {
-          parents.push({ id: padId(parts[0]), name: parts[1].trim() });
-        } else if (parts.length === 1 && padId(parts[0]) !== '0000') {
-          parents.push({ id: padId(parts[0]), name: '' });
-        }
-      } else {
-        // 多只父方: 034\尼多王,104\卡拉卡拉 或 182|美丽花
-        for (const pair of mspContent.split(',')) {
-          const seg = pair.split(/[\\|]/);
-          if (seg.length >= 2 && seg[0].trim() && seg[1].trim()) {
-            parents.push({ id: padId(seg[0]), name: seg[1].trim() });
-          }
-        }
-      }
-    }
-
-    // 父方模板之后的部分: |招式名|类型|威力|命中|PP|...
-    const afterParents = inner.substring(inner.indexOf('}}') + 2);
-    const cleaned = afterParents.replace(/^(<br>)?\|?/, '');
-    const fields = cleaned.split('|').map(s => s.trim()).filter(s => s && s !== "'''");
-
-    if (fields.length >= 1) {
-      moves.push({
-        name: fields[0],
-        type: fields[1] || '',
-        power: fields[2] || '',
-        accuracy: fields[3] || '',
-        pp: fields[4] || '',
-        parents,
-      });
-    }
-  }
-
-  return { id: dexId, nameZh, eggMoves: moves };
+  return {
+    id: dexId,
+    nameZh,
+    learnable: parseSection(content, 'level', hasCategory),
+    machine: parseSection(content, 'tm', hasCategory),
+    egg: parseSection(content, 'breed', hasCategory),
+    tutor: parseSection(content, 'tutor', hasCategory),
+  };
 }
 
 async function downloadGen(gen) {
   const genName = GEN_NAMES[gen];
   console.log(`\n=== ${genName} ===`);
 
-  // 1. 分类 API 获取页面列表
   let allTitles = [];
   let cmcontinue = '';
   do {
-    const params = {
-      action: 'query',
-      list: 'categorymembers',
-      cmtitle: `Category:宝可梦招式表（${genName}）`,
-      cmlimit: 'max',
-    };
+    const params = { action: 'query', list: 'categorymembers', cmtitle: `Category:宝可梦招式表（${genName}）`, cmlimit: 'max' };
     if (cmcontinue) params.cmcontinue = cmcontinue;
     const data = await apiGet(params);
     const members = data.query?.categorymembers || [];
@@ -173,30 +194,22 @@ async function downloadGen(gen) {
 
   if (TEST_MODE) allTitles = allTitles.slice(0, 10);
 
-  // 2. 批量获取页面内容 (50页/请求, POST)
   const results = {};
   const totalBatches = Math.ceil(allTitles.length / BATCH_SIZE);
   for (let i = 0; i < allTitles.length; i += BATCH_SIZE) {
     const batch = allTitles.slice(i, i + BATCH_SIZE);
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const data = await apiPost({
-      action: 'query',
-      titles: batch.join('|'),
-      prop: 'revisions',
-      rvprop: 'content',
-    });
-
+    const data = await apiPost({ action: 'query', titles: batch.join('|'), prop: 'revisions', rvprop: 'content' });
     const pages = data.query?.pages || {};
     for (const pageId of Object.keys(pages)) {
       const page = pages[pageId];
       if (page.missing !== undefined || page.invalid !== undefined) continue;
       const content = page.revisions?.[0]?.['*'] || '';
-      const parsed = parseEggMoves(content);
-      if (parsed) results[parsed.id] = { nameZh: parsed.nameZh, eggMoves: parsed.eggMoves };
+      const parsed = parsePage(page.title, content);
+      if (parsed) results[parsed.id] = { nameZh: parsed.nameZh, learnable: parsed.learnable, machine: parsed.machine, egg: parsed.egg, tutor: parsed.tutor };
     }
-
-    const eggTotal = Object.values(results).reduce((s, p) => s + p.eggMoves.length, 0);
-    console.log(`  批次 ${batchNum}/${totalBatches}: 累计 ${Object.keys(results).length} 只, ${eggTotal} 招式`);
+    const eggTotal = Object.values(results).reduce((s, p) => s + p.egg.length, 0);
+    console.log(`  批次 ${batchNum}/${totalBatches}: ${Object.keys(results).length} 只, ${eggTotal} 蛋招式`);
     await sleep(DELAY_MS);
   }
 
@@ -204,31 +217,27 @@ async function downloadGen(gen) {
 }
 
 async function main() {
-  console.log('52poke 蛋招式批量下载');
-  console.log(`模式: ${TEST_MODE ? '测试(前10页)' : '全量(Gen2-8)'}`);
-  console.log(`策略: API批量获取, ${BATCH_SIZE}页/请求, ${DELAY_MS}ms间隔`);
+  console.log(`52poke 全招式批量下载 (${TEST_MODE ? '测试' : '全量 Gen2-8'})`);
 
   const allGens = {};
-  for (const gen of GENS) {
-    allGens[String(gen)] = await downloadGen(gen);
-  }
+  for (const gen of GENS) allGens[String(gen)] = await downloadGen(gen);
 
-  // 统计
   console.log('\n=== 汇总 ===');
   for (const gen of GENS) {
     const data = allGens[String(gen)];
     const count = Object.keys(data).length;
-    const eggTotal = Object.values(data).reduce((s, p) => s + p.eggMoves.length, 0);
-    console.log(`  Gen${gen}: ${count} 只, ${eggTotal} 条蛋招式`);
+    const lv = Object.values(data).reduce((s, p) => s + p.learnable.length, 0);
+    const tm = Object.values(data).reduce((s, p) => s + p.machine.length, 0);
+    const egg = Object.values(data).reduce((s, p) => s + p.egg.length, 0);
+    const tu = Object.values(data).reduce((s, p) => s + p.tutor.length, 0);
+    console.log(`  Gen${gen}: ${count}只 | 升级${lv} 学习器${tm} 蛋招式${egg} 教授${tu}`);
   }
 
-  // 保存
   const outDir = path.join(__dirname, '..', 'data');
   fs.mkdirSync(outDir, { recursive: true });
-  const outPath = path.join(outDir, 'egg_moves_by_gen.json');
+  const outPath = path.join(outDir, 'moves_by_gen.json');
   fs.writeFileSync(outPath, JSON.stringify(allGens, null, 1), 'utf8');
-  console.log(`\n保存到: ${outPath}`);
-  console.log(`文件大小: ${(fs.statSync(outPath).size / 1024).toFixed(0)} KB`);
+  console.log(`\n保存: ${outPath} (${(fs.statSync(outPath).size / 1024).toFixed(0)} KB)`);
 }
 
 main().catch(e => { console.error('致命错误:', e); process.exit(1); });

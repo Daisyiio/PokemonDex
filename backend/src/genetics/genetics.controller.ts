@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Body } from '@nestjs/common';
+import { Controller, Get, Param, Post, Body, Query } from '@nestjs/common';
 import { GeneticsService } from './genetics.service';
 
 @Controller('genetics')
@@ -11,8 +11,13 @@ export class GeneticsController {
   }
 
   @Get('species/:id/egg-moves')
-  eggMoves(@Param('id') id: string) {
-    return this.geneticsService.eggMoves(id);
+  eggMoves(@Param('id') id: string, @Query('gen') gen?: string) {
+    return this.geneticsService.eggMoves(id, gen ? Number(gen) : undefined);
+  }
+
+  @Get('species/:id/all-moves')
+  allMoves(@Param('id') id: string, @Query('gen') gen?: string) {
+    return this.geneticsService.allMovesByGen(id, gen ? Number(gen) : undefined);
   }
 
   @Post('plan')

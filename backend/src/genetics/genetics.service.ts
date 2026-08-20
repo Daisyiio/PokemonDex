@@ -1,5 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface SpeciesInfo {
   id: string;
@@ -26,6 +28,8 @@ export class GeneticsService {
   private static moveToEggReceivers: Map<string, Set<string>> | null = null;
   private static detailCache: Map<string, any> | null = null;
   private static nameZhToId: Map<string, string> | null = null;
+  private static eggMovesByGen: Map<string, Map<string, Map<string, any>>> | null = null;
+  private static eggReceiversByGen: Map<string, Map<string, Set<string>>> | null = null;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -141,6 +145,71 @@ export class GeneticsService {
     GeneticsService.detailCache = detailCache;
   }
 
+  private async loadEggMovesByGen() {
+    if (GeneticsService.eggMovesByGen) return;
+    const filePath = path.join(process.cwd(), 'data', 'moves_by_gen.json');
+    if (!fs.existsSync(filePath)) return;
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const byGen = new Map<string, Map<string, Map<string, any>>>();
+    const receiversByGen = new Map<string, Map<string, Set<string>>>();
+    for (const [gen, species] of Object.entries(data)) {
+      const genMap = new Map<string, Map<string, any>>();
+      const recvMap = new Map<string, Set<string>>();
+      for (const [id, info] of Object.entries(species as any)) {
+        const moveMap = new Map<string, any>();
+        for (const m of (info as any).egg || []) {
+          moveMap.set(m.name, { type: m.type || '', category: m.category || '', power: m.power || '', accuracy: m.accuracy || '', pp: m.pp || '', parents: m.parents || [] });
+          let set = recvMap.get(m.name);
+          if (!set) { set = new Set(); recvMap.set(m.name, set); }
+          set.add(id);
+        }
+        genMap.set(id, moveMap);
+      }
+      byGen.set(gen, genMap);
+      receiversByGen.set(gen, recvMap);
+    }
+    GeneticsService.eggMovesByGen = byGen;
+    GeneticsService.eggReceiversByGen = receiversByGen;
+  }
+
+  async allMovesByGen(id: string, gen?: number) {
+    await this.load();
+    const info = GeneticsService.byId!.get(id);
+    if (!info) throw new BadRequestException('宝可梦不存在');
+    if (!gen || gen === 9 || gen < 2 || gen > 8) {
+      return { generation: 9, learnable: [], machine: [], egg: [], tutor: [] };
+    }
+    await this.loadEggMovesByGen();
+    const filePath = path.join(process.cwd(), 'data', 'moves_by_gen.json');
+    if (!fs.existsSync(filePath)) return { generation: gen, learnable: [], machine: [], egg: [], tutor: [] };
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const species = raw[String(gen)]?.[id];
+    if (!species) return { generation: gen, learnable: [], machine: [], egg: [], tutor: [] };
+    return {
+      generation: gen,
+      learnable: species.learnable || [],
+      machine: species.machine || [],
+      egg: species.egg || [],
+      tutor: species.tutor || [],
+    };
+  }
+
+  private getEggMapForGen(targetId: string, generation: number): Map<string, any> {
+    if (generation >= 6) {
+      return GeneticsService.eggMovesBySpecies!.get(targetId) || new Map();
+    }
+    const gen = generation <= 5 ? '5' : String(generation);
+    return GeneticsService.eggMovesByGen?.get(gen)?.get(targetId) || new Map();
+  }
+
+  private getReceiversForGen(move: string, generation: number): Set<string> {
+    if (generation >= 6) {
+      return GeneticsService.moveToEggReceivers!.get(move) || new Set();
+    }
+    const gen = generation <= 5 ? '5' : String(generation);
+    return GeneticsService.eggReceiversByGen?.get(gen)?.get(move) || new Set();
+  }
+
   private info(s: SpeciesInfo) {
     return { id: s.id, nameZh: s.nameZh, nameEn: s.nameEn, image: s.image, types: s.types, eggGroups: s.eggGroups, genderRatio: s.genderRatio };
   }
@@ -167,16 +236,24 @@ export class GeneticsService {
     return GeneticsService.order!.filter((s) => s.breedable && s.isBaseForm).map((s) => this.info(s));
   }
 
-  async eggMoves(id: string) {
+  async eggMoves(id: string, gen?: number) {
     await this.load();
     const info = GeneticsService.byId!.get(id);
     if (!info) throw new BadRequestException('宝可梦不存在');
-    const eggMap = GeneticsService.eggMovesBySpecies!.get(id) || new Map();
+    
+    let eggMap: Map<string, any>;
+    if (gen && gen >= 2 && gen <= 8) {
+      await this.loadEggMovesByGen();
+      eggMap = GeneticsService.eggMovesByGen?.get(String(gen))?.get(id) || new Map();
+    } else {
+      eggMap = GeneticsService.eggMovesBySpecies!.get(id) || new Map();
+    }
     return {
       target: this.info(info),
       eggGroups: info.eggGroups,
       breedable: info.breedable,
       genderRatio: info.genderRatio,
+      generation: gen || 9,
       eggMoves: Array.from(eggMap.entries()).map(([name, def]) => ({
         name,
         type: def.type,
@@ -189,6 +266,7 @@ export class GeneticsService {
 
   async plan(targetId: string, moves: string[], generation: number) {
     await this.load();
+    if (generation >= 2 && generation <= 8) await this.loadEggMovesByGen();
     const byId = GeneticsService.byId!;
     const target = byId.get(targetId);
     if (!target) throw new BadRequestException('宝可梦不存在');
@@ -196,20 +274,20 @@ export class GeneticsService {
 
     const isAllMale = target.genderRatio.female === 0 && !this.isGenderless(target);
     const isGenderless = this.isGenderless(target);
-    const eggMap = GeneticsService.eggMovesBySpecies!.get(targetId) || new Map();
+    const eggMap = this.getEggMapForGen(targetId, generation);
 
     const moveResults = moves.map((move) => {
       if (!eggMap.has(move)) {
         return { move, valid: false, reason: `「${move}」不是${target.nameZh}可遗传的蛋招式，无法通过孵蛋获得。` };
       }
-      const sols = this.findSolutions(move, target, generation);
+      const sols = this.findSolutions(move, target, generation, eggMap.get(move));
       if (sols.length === 0) {
         return { move, valid: true, reason: `找到了该蛋招式但暂无可用遗传路径。` };
       }
       return { move, valid: true, solutions: sols };
     });
 
-    const combinedDirect = this.findCombinedDirect(moves, target, generation);
+    const combinedDirect = this.findCombinedDirect(moves, target, generation, eggMap);
 
     let specialNote: string | undefined;
     if (isGenderless) {
@@ -334,16 +412,26 @@ export class GeneticsService {
     };
   }
 
-  private findSolutions(move: string, target: SpeciesInfo, generation: number): any[] {
+  private findSolutions(move: string, target: SpeciesInfo, generation: number, eggDef: any): any[] {
     const solutions: any[] = [];
 
-    // Direct: species that learn by level-up, share egg group, male-capable
-    const learners = GeneticsService.moveToLevelLearners!.get(move) || new Set<string>();
+    // Direct: use parents list from egg moves data (generation-specific)
     const directCandidates: SpeciesInfo[] = [];
-    for (const id of learners) {
-      const s = GeneticsService.byId!.get(id);
-      if (!s || !s.breedable || s.genderRatio.male <= 0) continue;
-      if (this.sharesEggGroup(s, target)) directCandidates.push(s);
+    if (eggDef?.parents) {
+      for (const parent of eggDef.parents) {
+        const s = GeneticsService.byId!.get(parent.id);
+        if (!s || !s.breedable || s.genderRatio.male <= 0) continue;
+        if (this.sharesEggGroup(s, target)) directCandidates.push(s);
+      }
+    }
+    // Fallback: use moveToLevelLearners (Gen9) if no parents from egg data
+    if (directCandidates.length === 0) {
+      const learners = GeneticsService.moveToLevelLearners!.get(move) || new Set<string>();
+      for (const id of learners) {
+        const s = GeneticsService.byId!.get(id);
+        if (!s || !s.breedable || s.genderRatio.male <= 0) continue;
+        if (this.sharesEggGroup(s, target)) directCandidates.push(s);
+      }
     }
     if (directCandidates.length > 0) {
       const eg = this.sharesEggGroup(directCandidates[0], target)!;
@@ -382,7 +470,7 @@ export class GeneticsService {
   private bfsChain(move: string, target: SpeciesInfo, generation: number): any[] {
     const byId = GeneticsService.byId!;
     const learners = GeneticsService.moveToLevelLearners!.get(move) || new Set<string>();
-    const receivers = GeneticsService.moveToEggReceivers!.get(move) || new Set<string>();
+    const receivers = this.getReceiversForGen(move, generation);
 
     const sources: SpeciesInfo[] = [];
     for (const id of learners) {
@@ -476,26 +564,27 @@ export class GeneticsService {
     return steps;
   }
 
-  private findCombinedDirect(moves: string[], target: SpeciesInfo, generation: number): any | null {
+  private findCombinedDirect(moves: string[], target: SpeciesInfo, generation: number, eggMap: Map<string, any>): any | null {
     if (moves.length === 0) return null;
+    // Use parents lists from egg moves data (generation-specific)
     const candidates = new Set<string>();
     for (const move of moves) {
-      const learners = GeneticsService.moveToLevelLearners!.get(move);
-      if (!learners) return null;
-      for (const id of learners) {
-        const s = GeneticsService.byId!.get(id);
+      const def = eggMap.get(move);
+      if (!def?.parents) return null;
+      for (const parent of def.parents) {
+        const s = GeneticsService.byId!.get(parent.id);
         if (!s || !s.breedable || s.genderRatio.male <= 0) continue;
-        if (this.sharesEggGroup(s, target)) candidates.add(id);
+        if (this.sharesEggGroup(s, target)) candidates.add(parent.id);
       }
     }
-    // Find species that can learn ALL moves by level-up
+    // Find species that are in ALL moves' parents lists
     const combined: SpeciesInfo[] = [];
     for (const id of candidates) {
       const s = GeneticsService.byId!.get(id)!;
       let canAll = true;
       for (const move of moves) {
-        const learners = GeneticsService.moveToLevelLearners!.get(move);
-        if (!learners || !learners.has(id)) { canAll = false; break; }
+        const def = eggMap.get(move);
+        if (!def?.parents?.some((p: any) => p.id === id)) { canAll = false; break; }
       }
       if (canAll) combined.push(s);
     }

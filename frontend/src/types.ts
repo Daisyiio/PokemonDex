@@ -231,6 +231,8 @@ export interface GeneticsEggMove {
   type: string
   category: string
   power: string
+  accuracy: string
+  pp: string
   parents: { id: string | null; name: string }[]
 }
 

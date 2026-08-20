@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { getPokemon, listPokemonIds, listAbilities, type PokemonNavItem } from '../api'
+import { getPokemon, listPokemonIds, listAbilities, getMovesByGen, type PokemonNavItem, type MovesByGenResponse } from '../api'
 import { imageUrl, typeColor } from '../types'
 import TypeBadge from '../components/TypeBadge.vue'
 import CategoryBadge from '../components/CategoryBadge.vue'
@@ -27,6 +27,8 @@ const openDexGen = ref(0)
 const navList = ref<PokemonNavItem[]>([])
 const abilityMap = ref<Record<string, string>>({})
 const abilityIdMap = ref<Record<string, string>>({})
+const moveGen = ref(9)
+const genMovesData = ref<MovesByGenResponse | null>(null)
 
 const navIndex = computed(() =>
   navList.value.findIndex((n) => n.id === route.params.id)
@@ -86,6 +88,8 @@ async function loadAbilities(names: string[]) {
 async function load() {
   error.value = ''
   detail.value = null
+  moveGen.value = 9
+  genMovesData.value = null
   try {
     const d = await getPokemon(route.params.id as string)
     detail.value = d
@@ -229,10 +233,28 @@ const MOVE_KEYS = {
 
 const activeMoves = () => {
   if (!detail.value) return []
+  if (moveGen.value !== 9 && genMovesData.value) {
+    const tab = activeTab.value
+    if (tab === 'moves') return genMovesData.value.learnable.map((m) => ({ name: m.name, level: m.level || '—', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
+    if (tab === 'machine') return genMovesData.value.machine.map((m) => ({ name: m.name, level: '', machine: m.tm || '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
+    if (tab === 'egg') return genMovesData.value.egg.map((m) => ({ name: m.name, level: '蛋', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
+  }
   const data = detail.value[MOVE_KEYS[activeTab.value]] as { form: string; data: MoveEntry[] }[]
   const list = data.find((d) => d.form === form()?.name)
   return (list || data[0] || { data: [] }).data
 }
+
+async function loadMovesByGen(gen: number) {
+  if (!detail.value || gen === 9) { genMovesData.value = null; return }
+  try {
+    genMovesData.value = await getMovesByGen(route.params.id as string, gen)
+  } catch { /* ignore */ }
+}
+
+watch(moveGen, (g) => {
+  if (g !== 9) loadMovesByGen(g)
+  else genMovesData.value = null
+})
 
 function evolutionImage(node: EvolutionNode): string {
   return imageUrl('dream', node.image || '')
@@ -593,6 +615,16 @@ function basePointsText(list: Form['base_points'] | undefined): string {
 
     <section class="section">
       <h2>可学会招式</h2>
+      <select v-model="moveGen" class="gen-select">
+        <option :value="9">第9世代</option>
+        <option :value="8">第8世代</option>
+        <option :value="7">第7世代</option>
+        <option :value="6">第6世代</option>
+        <option :value="5">第5世代</option>
+        <option :value="4">第4世代</option>
+        <option :value="3">第3世代</option>
+        <option :value="2">第2世代</option>
+      </select>
       <div class="seg tabs">
         <button :class="{ active: activeTab === 'moves' }" @click="activeTab = 'moves'">
           升级学习
@@ -1408,6 +1440,18 @@ function basePointsText(list: Form['base_points'] | undefined): string {
 .tabs {
   margin: 0 0 14px;
 }
+.gen-select {
+  margin-bottom: 14px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
+  outline: none;
+  float: right;
+}
+.gen-select:focus { border-color: var(--accent); }
 
 .table-wrap {
   overflow: auto;
