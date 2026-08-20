@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import {
   listBreedingSpecies,
   getBreedingMoves,
@@ -35,6 +35,7 @@ const search = ref('')
 const targetId = ref('')
 const movesData = ref<BreedingMovesResponse | null>(null)
 const movesLoading = ref(false)
+const movesPanelEl = ref<HTMLElement | null>(null)
 const selectedMoves = ref<string[]>([])
 const plan = ref<BreedingPlan | null>(null)
 const motherId = ref('')
@@ -69,6 +70,10 @@ async function pickTarget(id: string) {
   error.value = ''
   try {
     movesData.value = await getBreedingMoves(id)
+    await nextTick()
+    window.setTimeout(() => {
+      movesPanelEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 80)
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -213,7 +218,7 @@ onMounted(async () => {
       </div>
 
       <Transition name="fade">
-        <div v-if="movesData" class="moves-panel">
+        <div v-if="movesData" ref="movesPanelEl" class="moves-panel">
           <div class="panel-head">
             <div class="panel-title">
               <SafeImage v-if="movesData.target.image" :src="imageUrl('official', movesData.target.image)" :alt="movesData.target.nameZh" class="panel-img" />
@@ -617,6 +622,7 @@ onMounted(async () => {
 
 .moves-panel {
   margin-top: 18px;
+  scroll-margin-top: 70px;
   background: var(--surface);
   border: 1px solid var(--border-faint);
   border-radius: 14px;
