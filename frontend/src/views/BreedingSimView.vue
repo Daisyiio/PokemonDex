@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   listBreedingSpecies,
   getBreedingMoves,
@@ -35,7 +35,6 @@ const search = ref('')
 const targetId = ref('')
 const movesData = ref<BreedingMovesResponse | null>(null)
 const movesLoading = ref(false)
-const movesPanelEl = ref<HTMLElement | null>(null)
 const selectedMoves = ref<string[]>([])
 const plan = ref<BreedingPlan | null>(null)
 const motherId = ref('')
@@ -70,15 +69,17 @@ async function pickTarget(id: string) {
   error.value = ''
   try {
     movesData.value = await getBreedingMoves(id)
-    await nextTick()
-    window.setTimeout(() => {
-      movesPanelEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 80)
   } catch (e) {
     error.value = (e as Error).message
   } finally {
     movesLoading.value = false
   }
+}
+
+function clearTarget() {
+  targetId.value = ''
+  movesData.value = null
+  selectedMoves.value = []
 }
 
 function toggleMove(name: string) {
@@ -197,15 +198,14 @@ onMounted(async () => {
         <span class="search-count">可选 {{ targetOptions.length }} 只</span>
       </div>
 
-      <div v-if="loading" class="grid">
+      <div v-if="!targetId && loading" class="grid">
         <div v-for="i in 12" :key="i" class="sk-card"></div>
       </div>
-      <div v-else class="grid">
+      <div v-if="!targetId && !loading" class="grid">
         <button
           v-for="s in targetOptions"
           :key="s.id"
           class="card"
-          :class="{ sel: s.id === targetId }"
           @click="pickTarget(s.id)"
         >
           <div class="card-img" :style="{ background: `linear-gradient(160deg, ${typeColor(s.types[0] || '一般')}22, var(--surface-2))` }">
@@ -217,58 +217,56 @@ onMounted(async () => {
         </button>
       </div>
 
-      <Transition name="fade">
-        <div v-if="movesData" ref="movesPanelEl" class="moves-panel">
-          <div class="panel-head">
-            <div class="panel-title">
-              <SafeImage v-if="movesData.target.image" :src="imageUrl('official', movesData.target.image)" :alt="movesData.target.nameZh" class="panel-img" />
-              <span>{{ movesData.target.nameZh }} 可获得的招式</span>
-            </div>
-            <div class="panel-hint">勾选目标招式（蛋招式需父方遗传）</div>
+      <div v-if="targetId" class="moves-panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <SafeImage v-if="movesData?.target.image" :src="imageUrl('official', movesData.target.image)" :alt="movesData.target.nameZh" class="panel-img" />
+            <span>{{ movesData?.target.nameZh }} 可获得的招式</span>
           </div>
-          <div v-if="movesLoading" class="hint">加载中…</div>
-          <div v-else class="moves-groups">
-            <div class="mg">
-              <div class="mg-title">升级招式（自学）</div>
-              <div class="mg-list">
-                <label v-for="m in movesData.learnable" :key="'l' + m.name" class="mi" :class="{ on: selectedMoves.includes(m.name) }">
-                  <input type="checkbox" :checked="selectedMoves.includes(m.name)" @change="toggleMove(m.name)" />
-                  <span class="mi-level">{{ m.level }}</span>
-                  <span class="mi-name">{{ m.name }}</span>
-                  <span class="chip" :style="{ color: typeColor(m.type), borderColor: typeColor(m.type) + '55' }">{{ m.type }}</span>
-                  <span class="chip" :style="{ color: categoryColor(m.category) }">{{ m.category }}</span>
-                </label>
-              </div>
-            </div>
-            <div class="mg">
-              <div class="mg-title">招式学习器（自学）</div>
-              <div class="mg-list">
-                <label v-for="m in movesData.machine" :key="'m' + m.name" class="mi" :class="{ on: selectedMoves.includes(m.name) }">
-                  <input type="checkbox" :checked="selectedMoves.includes(m.name)" @change="toggleMove(m.name)" />
-                  <span class="mi-level">TM</span>
-                  <span class="mi-name">{{ m.name }}</span>
-                  <span class="chip" :style="{ color: typeColor(m.type), borderColor: typeColor(m.type) + '55' }">{{ m.type }}</span>
-                  <span class="chip" :style="{ color: categoryColor(m.category) }">{{ m.category }}</span>
-                </label>
-              </div>
-            </div>
-            <div class="mg">
-              <div class="mg-title">蛋招式（需父方遗传）</div>
-              <div class="mg-list">
-                <label v-for="m in movesData.egg" :key="'e' + m.name" class="mi" :class="{ on: selectedMoves.includes(m.name) }">
-                  <input type="checkbox" :checked="selectedMoves.includes(m.name)" @change="toggleMove(m.name)" />
-                  <span class="mi-level">蛋</span>
-                  <span class="mi-name">{{ m.name }}</span>
-                  <span class="chip" :style="{ color: typeColor(m.type), borderColor: typeColor(m.type) + '55' }">{{ m.type }}</span>
-                  <span class="chip" :style="{ color: categoryColor(m.category) }">{{ m.category }}</span>
-                  <span class="mi-tip">父方可遗传：{{ m.parents.map((p) => p.name).join('、') }}</span>
-                </label>
-              </div>
-            </div>
-          </div>
-          <button class="btn-main" :disabled="!targetId" @click="goPlan">下一步：选择父母 →</button>
+          <button class="panel-back" @click="clearTarget">换一个</button>
         </div>
-      </Transition>
+        <div v-if="movesLoading" class="hint">加载中…</div>
+        <div v-else class="moves-groups">
+          <div class="mg">
+            <div class="mg-title">升级招式（自学）</div>
+            <div class="mg-list">
+              <label v-for="m in movesData?.learnable ?? []" :key="'l' + m.name" class="mi" :class="{ on: selectedMoves.includes(m.name) }">
+                <input type="checkbox" :checked="selectedMoves.includes(m.name)" @change="toggleMove(m.name)" />
+                <span class="mi-level">{{ m.level }}</span>
+                <span class="mi-name">{{ m.name }}</span>
+                <span class="chip" :style="{ color: typeColor(m.type), borderColor: typeColor(m.type) + '55' }">{{ m.type }}</span>
+                <span class="chip" :style="{ color: categoryColor(m.category) }">{{ m.category }}</span>
+              </label>
+            </div>
+          </div>
+          <div class="mg">
+            <div class="mg-title">招式学习器（自学）</div>
+            <div class="mg-list">
+              <label v-for="m in movesData?.machine ?? []" :key="'m' + m.name" class="mi" :class="{ on: selectedMoves.includes(m.name) }">
+                <input type="checkbox" :checked="selectedMoves.includes(m.name)" @change="toggleMove(m.name)" />
+                <span class="mi-level">TM</span>
+                <span class="mi-name">{{ m.name }}</span>
+                <span class="chip" :style="{ color: typeColor(m.type), borderColor: typeColor(m.type) + '55' }">{{ m.type }}</span>
+                <span class="chip" :style="{ color: categoryColor(m.category) }">{{ m.category }}</span>
+              </label>
+            </div>
+          </div>
+          <div class="mg">
+            <div class="mg-title">蛋招式（需父方遗传）</div>
+            <div class="mg-list">
+              <label v-for="m in movesData?.egg ?? []" :key="'e' + m.name" class="mi" :class="{ on: selectedMoves.includes(m.name) }">
+                <input type="checkbox" :checked="selectedMoves.includes(m.name)" @change="toggleMove(m.name)" />
+                <span class="mi-level">蛋</span>
+                <span class="mi-name">{{ m.name }}</span>
+                <span class="chip" :style="{ color: typeColor(m.type), borderColor: typeColor(m.type) + '55' }">{{ m.type }}</span>
+                <span class="chip" :style="{ color: categoryColor(m.category) }">{{ m.category }}</span>
+                <span class="mi-tip">父方可遗传：{{ m.parents.map((p) => p.name).join('、') }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <button class="btn-main" :disabled="!targetId" @click="goPlan">下一步：选择父母 →</button>
+      </div>
     </template>
 
     <!-- 步骤2：选择父母 -->
@@ -622,7 +620,6 @@ onMounted(async () => {
 
 .moves-panel {
   margin-top: 18px;
-  scroll-margin-top: 70px;
   background: var(--surface);
   border: 1px solid var(--border-faint);
   border-radius: 14px;
@@ -642,6 +639,23 @@ onMounted(async () => {
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
+}
+.panel-back {
+  margin-left: auto;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  font: inherit;
+}
+.panel-back:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .panel-img {
   width: 34px;
@@ -1190,14 +1204,6 @@ onMounted(async () => {
 }
 .link {
   font-size: 14px;
-}
-
-.fade-enter-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-.fade-enter-from {
-  opacity: 0;
-  transform: translateY(6px);
 }
 
 .sk-card {
