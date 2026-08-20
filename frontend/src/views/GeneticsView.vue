@@ -203,15 +203,17 @@ onMounted(async () => {
             <span class="rc-gender">♂</span>
           </div>
           <div class="rc-eg">共享蛋组：{{ plan.combinedDirect.sharedEggGroup }}</div>
-          <div class="rc-note">放入饲育屋，子代{{ plan.target.nameZh }}自带全部所选蛋招式</div>
+          <div v-if="plan.combinedDirect.learnInfo" class="rc-learn">
+            <span v-for="li in plan.combinedDirect.learnInfo" :key="li.move" class="learn-tag">
+              {{ li.move }}：{{ li.level === '—' ? '初始' : 'Lv.' + li.level }}
+            </span>
+          </div>
+          <div class="rc-note">父方需先习得上述招式，放入饲育屋后子代{{ plan.target.nameZh }}自带全部所选蛋招式</div>
           <div v-if="plan.combinedDirect.candidates.length > 1" class="rc-cands">
             其他候选父本：
-            <router-link
-              v-for="c in plan.combinedDirect.candidates.slice(1)"
-              :key="c.id"
-              :to="`/pokemon/${c.id}`"
-              class="rc-link"
-            >{{ c.nameZh }}</router-link>
+            <span v-for="c in plan.combinedDirect.candidates.slice(1)" :key="c.id" class="cand-tag">
+              <router-link :to="`/pokemon/${c.id}`" class="rc-link">{{ c.nameZh }}</router-link>
+            </span>
           </div>
         </div>
       </div>
@@ -253,12 +255,10 @@ onMounted(async () => {
 
             <div v-if="sol.type === 'direct' && sol.candidates && sol.candidates.length > 1" class="sol-cands">
               其他候选父本：
-              <router-link
-                v-for="c in sol.candidates.slice(1)"
-                :key="c.id"
-                :to="`/pokemon/${c.id}`"
-                class="rc-link"
-              >{{ c.nameZh }}</router-link>
+              <span v-for="c in sol.candidates.slice(1)" :key="c.id" class="cand-tag">
+                <router-link :to="`/pokemon/${c.id}`" class="rc-link">{{ c.nameZh }}</router-link>
+                <span class="cand-lv">{{ c.learnLevel === '—' ? '初始' : 'Lv.' + c.learnLevel }}</span>
+              </span>
             </div>
           </div>
         </div>
@@ -500,6 +500,10 @@ onMounted(async () => {
 .step-eg { font-size: 12px; color: var(--text-3); margin: 4px 0; }
 .step-note { font-size: 12px; color: var(--text-3); line-height: 1.5; }
 .sol-cands { font-size: 12px; color: var(--text-3); margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.cand-tag { display: inline-flex; align-items: center; gap: 4px; }
+.cand-lv { font-size: 10px; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 6px; }
+.rc-learn { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.learn-tag { font-size: 11px; color: var(--ok); background: var(--ok-soft); border-radius: 999px; padding: 2px 8px; }
 .sk-card {
   height: 120px;
   border-radius: 12px;

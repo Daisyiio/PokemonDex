@@ -145,6 +145,23 @@ export class GeneticsService {
     return { id: s.id, nameZh: s.nameZh, nameEn: s.nameEn, image: s.image, types: s.types, eggGroups: s.eggGroups, genderRatio: s.genderRatio };
   }
 
+  private getLearnLevel(speciesId: string, moveName: string): string {
+    const d = GeneticsService.detailCache!.get(speciesId);
+    if (!d) return '?';
+    for (const g of d.learnable_moves || []) {
+      for (const it of g.data || []) {
+        if (it?.name === moveName) return it.level || '?';
+      }
+    }
+    return '?';
+  }
+
+  private levelText(level: string): string {
+    if (level === '?' || !level) return '需先习得该招式';
+    if (level === '—') return '初始即可习得';
+    return `需升级至 Lv.${level} 习得`;
+  }
+
   async species() {
     await this.load();
     return GeneticsService.order!.filter((s) => s.breedable && s.isBaseForm).map((s) => this.info(s));
@@ -223,17 +240,21 @@ export class GeneticsService {
     }
     if (directCandidates.length > 0) {
       const eg = this.sharesEggGroup(directCandidates[0], target)!;
+      const lv = this.getLearnLevel(directCandidates[0].id, move);
       solutions.push({
         type: 'direct',
         stepCount: 1,
-        candidates: directCandidates.map((s) => this.info(s)),
+        candidates: directCandidates.map((s) => ({
+          ...this.info(s),
+          learnLevel: this.getLearnLevel(s.id, move),
+        })),
         sharedEggGroup: eg,
         steps: [{
           father: this.info(directCandidates[0]),
           mother: this.info(target),
           offspring: this.info(target),
           sharedEggGroup: eg,
-          note: `两只放入饲育屋，出生子代${target.nameZh}自带「${move}」`,
+          note: `父方${directCandidates[0].nameZh}${this.levelText(lv)}「${move}」，放入饲育屋，出生子代${target.nameZh}自带该蛋招式`,
         }],
       });
     }
@@ -322,14 +343,27 @@ export class GeneticsService {
       const offspring = mother;
       const eg = this.sharesEggGroup(father, mother);
       const isLast = i === path.length - 1;
+      const isFirst = i === 0;
+      let note: string;
+      if (isFirst) {
+        const lv = this.getLearnLevel(father.id, move);
+        const lvText = this.levelText(lv);
+        if (isLast) {
+          note = `父方${father.nameZh}${lvText}「${move}」，放入饲育屋，出生子代${target.nameZh}自带「${move}」`;
+        } else {
+          note = `父方${father.nameZh}${lvText}「${move}」，与母的${mother.nameZh}配对 → 产出公的${mother.nameZh}，已学会「${move}」`;
+        }
+      } else {
+        note = isLast
+          ? `公的${father.nameZh}（携带「${move}」）× 母的${mother.nameZh} → 产出子代${target.nameZh}，携带「${move}」`
+          : `公的${father.nameZh}（携带「${move}」）× 母的${mother.nameZh} → 产出公的${mother.nameZh}，已学会「${move}」`;
+      }
       steps.push({
         father: this.info(father),
         mother: this.info(mother),
         offspring: this.info(offspring),
         sharedEggGroup: eg || '?',
-        note: isLast
-          ? `公的${father.nameZh}（携带「${move}」）× 母的${mother.nameZh} → 产出子代${target.nameZh}，携带「${move}」`
-          : `公的${father.nameZh}（携带「${move}」）× 母的${mother.nameZh} → 产出公的${mother.nameZh}，已学会「${move}」`,
+        note,
       });
     }
     return steps;
@@ -365,6 +399,7 @@ export class GeneticsService {
       candidates: combined.map((s) => this.info(s)),
       sharedEggGroup: eg,
       moves,
+      learnInfo: moves.map((m) => ({ move: m, level: this.getLearnLevel(combined[0].id, m) })),
     };
   }
 }

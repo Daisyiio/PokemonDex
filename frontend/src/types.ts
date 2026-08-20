@@ -223,6 +223,7 @@ export interface GeneticsBrief {
   types: string[]
   eggGroups: string[]
   genderRatio: { male: number; female: number }
+  learnLevel?: string
 }
 
 export interface GeneticsEggMove {
@@ -273,5 +274,6 @@ export interface GeneticsPlan {
     candidates: GeneticsBrief[]
     sharedEggGroup: string
     moves: string[]
+    learnInfo?: { move: string; level: string }[]
   }
 }
