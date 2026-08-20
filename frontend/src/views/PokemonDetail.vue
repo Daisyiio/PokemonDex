@@ -326,17 +326,6 @@ function basePointsText(list: Form['base_points'] | undefined): string {
     .map((p) => `${statLabels[p.stat] || p.stat}+${p.value}`)
   return parts.length ? parts.join('、') : '—'
 }
-
-function pokeBallCatchChance(catchRate: string): string {
-  const cr = parseInt(catchRate, 10)
-  if (isNaN(cr) || cr <= 0) return '—'
-  if (cr >= 255) return '100%'
-  const a = Math.max(1, cr / 3)
-  if (a >= 255) return '100%'
-  const b = 1048560 / Math.sqrt(Math.sqrt(255 / a))
-  const p = Math.pow(b / 65536, 4) * 100
-  return '约' + (p < 0.1 ? p.toFixed(2) : p.toFixed(1)) + '%'
-}
 </script>
 
 <template>
@@ -442,10 +431,7 @@ function pokeBallCatchChance(catchRate: string): string {
       <div class="info-grid">
         <div class="info-item">
           <span class="info-label">捕获率</span>
-          <span class="info-value">
-            {{ form()!.catch_rate || '—' }}
-            <span class="info-sub">（精灵球·满体力 {{ pokeBallCatchChance(form()!.catch_rate) }}）</span>
-          </span>
+          <span class="info-value">{{ form()!.catch_rate || '—' }}</span>
         </div>
         <div class="info-item">
           <span class="info-label">基础经验</span>
@@ -467,13 +453,13 @@ function pokeBallCatchChance(catchRate: string): string {
           <span class="info-label">性别比例</span>
           <span class="info-value gender-bar-wrap">
             <span v-if="form()!.gender_ratio.male + form()!.gender_ratio.female === 0" class="gender-none">无性别</span>
-            <span v-else class="gender-bar">
-              <span class="gender-f" :style="{ width: form()!.gender_ratio.female + '%' }">
-                <span v-if="form()!.gender_ratio.female > 5">♀ {{ form()!.gender_ratio.female }}%</span>
+            <span v-else class="gender-flex">
+              <span class="gender-label g-f">♀ {{ form()!.gender_ratio.female }}%</span>
+              <span class="gender-bar">
+                <span class="gender-f" :style="{ width: form()!.gender_ratio.female + '%' }"></span>
+                <span class="gender-m" :style="{ width: form()!.gender_ratio.male + '%' }"></span>
               </span>
-              <span class="gender-m" :style="{ width: form()!.gender_ratio.male + '%' }">
-                <span v-if="form()!.gender_ratio.male > 5">♂ {{ form()!.gender_ratio.male }}%</span>
-              </span>
+              <span class="gender-label g-m">♂ {{ form()!.gender_ratio.male }}%</span>
             </span>
           </span>
         </div>
@@ -1105,39 +1091,38 @@ function pokeBallCatchChance(catchRate: string): string {
   color: var(--text);
   word-break: break-word;
 }
-.info-sub {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-3);
-}
 .gender-bar-wrap {
   width: 100%;
 }
-.gender-bar {
-  display: flex;
-  height: 22px;
-  border-radius: 999px;
-  overflow: hidden;
-  width: 100%;
-  max-width: 200px;
-}
-.gender-f {
+.gender-flex {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 11px;
+  gap: 8px;
+}
+.gender-label {
+  font-size: 12px;
   font-weight: 700;
-  color: #fff;
+  white-space: nowrap;
+}
+.gender-label.g-f {
+  color: #e05a7a;
+}
+.gender-label.g-m {
+  color: #4f86e0;
+}
+.gender-bar {
+  display: flex;
+  flex: 1;
+  height: 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  min-width: 60px;
+}
+.gender-f {
   background: #e05a7a;
   transition: width 0.3s;
 }
 .gender-m {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
   background: #4f86e0;
   transition: width 0.3s;
 }
