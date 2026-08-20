@@ -450,6 +450,13 @@ function basePointsText(list: Form['base_points'] | undefined): string {
           <span class="info-value">{{ basePointsText(form()!.base_points) }}</span>
         </div>
         <div class="info-item">
+          <span class="info-label">体型</span>
+          <span class="info-value shape-value">
+            <ShapeIcon :shape="form()!.shape" />
+            {{ shapeLabel(form()!.shape) }}
+          </span>
+        </div>
+        <div class="info-item info-item--gender">
           <span class="info-label">性别比例</span>
           <span class="info-value gender-bar-wrap">
             <span v-if="form()!.gender_ratio.male + form()!.gender_ratio.female === 0" class="gender-none">无性别</span>
@@ -461,13 +468,6 @@ function basePointsText(list: Form['base_points'] | undefined): string {
               </span>
               <span class="gender-label g-m">♂ {{ form()!.gender_ratio.male }}%</span>
             </span>
-          </span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">体型</span>
-          <span class="info-value shape-value">
-            <ShapeIcon :shape="form()!.shape" />
-            {{ shapeLabel(form()!.shape) }}
           </span>
         </div>
         <div class="info-item">
@@ -1205,6 +1205,9 @@ function basePointsText(list: Form['base_points'] | undefined): string {
 @media (max-width: 640px) {
   .info-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .info-item--gender {
+    grid-column: 1 / -1;
   }
 }
 
