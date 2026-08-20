@@ -56,5 +56,9 @@ defineProps<{
   .type-badge-text {
     display: none;
   }
+  .picon {
+    width: 100%;
+    background-position-x: center;
+  }
 }
 </style>
