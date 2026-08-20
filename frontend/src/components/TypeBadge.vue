@@ -43,22 +43,17 @@ defineProps<{
   .type-badge {
     width: 26px;
     height: 26px;
-    padding: 0;
+    padding: 0 !important;
     justify-content: center;
     border-radius: 50%;
   }
   .type-badge-lg {
     width: 28px;
     height: 28px;
-    padding: 0;
     gap: 0;
   }
   .type-badge-text {
     display: none;
-  }
-  .picon {
-    width: 100%;
-    background-position-x: center;
   }
 }
 </style>
