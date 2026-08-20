@@ -60,6 +60,17 @@ const labelPos = props.labels.map((_, i) => {
   }
 })
 
+const valuePos = props.labels.map((_, i) => {
+  const v = Math.min(props.values[i] ?? 0, scaleMax)
+  const r = (radius * v) / scaleMax
+  const a = angle(i)
+  const off = 14
+  return {
+    x: cx + (r + off) * Math.cos(a),
+    y: cy + (r + off) * Math.sin(a),
+  }
+})
+
 const textAnchor = (x: number) =>
   x > cx + 12 ? 'start' : x < cx - 12 ? 'end' : 'middle'
 </script>
@@ -118,6 +129,19 @@ const textAnchor = (x: number) =>
       fill="var(--text-2)"
     >
       {{ labels[li] }}
+    </text>
+    <text
+      v-for="(vp, vi) in valuePos"
+      :key="'v' + vi"
+      :x="vp.x"
+      :y="vp.y"
+      :text-anchor="textAnchor(vp.x)"
+      dominant-baseline="middle"
+      font-size="11"
+      font-weight="700"
+      fill="var(--accent)"
+    >
+      {{ values[vi] }}
     </text>
   </svg>
 </template>
