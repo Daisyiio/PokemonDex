@@ -1,0 +1,75 @@
+.picon {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background-image: url('/images/types.webp');
+  background-repeat: no-repeat;
+  background-size: 20px 420px;
+  vertical-align: -4px;
+  flex-shrink: 0;
+}
+
+.picon-t-一般 {
+  background-position: 0 0;
+}
+.picon-t-格斗 {
+  background-position: 0 -20px;
+}
+.picon-t-飞行 {
+  background-position: 0 -40px;
+}
+.picon-t-毒 {
+  background-position: 0 -60px;
+}
+.picon-t-地面 {
+  background-position: 0 -80px;
+}
+.picon-t-岩石 {
+  background-position: 0 -100px;
+}
+.picon-t-虫 {
+  background-position: 0 -120px;
+}
+.picon-t-幽灵 {
+  background-position: 0 -140px;
+}
+.picon-t-钢 {
+  background-position: 0 -160px;
+}
+.picon-t-火 {
+  background-position: 0 -180px;
+}
+.picon-t-水 {
+  background-position: 0 -200px;
+}
+.picon-t-草 {
+  background-position: 0 -220px;
+}
+.picon-t-电 {
+  background-position: 0 -240px;
+}
+.picon-t-超能力 {
+  background-position: 0 -260px;
+}
+.picon-t-冰 {
+  background-position: 0 -280px;
+}
+.picon-t-龙 {
+  background-position: 0 -300px;
+}
+.picon-t-恶 {
+  background-position: 0 -320px;
+}
+.picon-t-妖精 {
+  background-position: 0 -340px;
+}
+
+.picon-c-物理 {
+  background-position: 0 -360px;
+}
+.picon-c-特殊 {
+  background-position: 0 -380px;
+}
+.picon-c-变化 {
+  background-position: 0 -400px;
+}

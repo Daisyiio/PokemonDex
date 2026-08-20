@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Pokemon {
+  id     String @id // pokedex_id, e.g. "0001"
+  nameZh String
+  nameJa String?
+  nameEn String?
+  types  String // JSON array of type names, e.g. ["草","毒"]
+  gen    Int?
+  filter String?
+  icon   String?
+  image  String? // official image filename, e.g. "0001-妙蛙种子.png"
+  detail String // full detail JSON (the original file content)
+
+  @@index([nameZh])
+  @@index([nameEn])
+  @@index([gen])
+}
+
+model Pokedex {
+  id   Int    @id @default(autoincrement())
+  name String @unique // e.g. "national", "伽勒尔"
+  data String // JSON array of dex entries
+}
+
+model Move {
+  id          String  @id
+  nameZh      String
+  nameJa      String?
+  nameEn      String?
+  type        String?
+  category    String?
+  power       String?
+  accuracy    String?
+  pp          String?
+  description String?
+  generation  Int?
+  isZ         String?
+
+  @@index([nameZh])
+  @@index([type])
+}
+
+model Ability {
+  id          String  @id
+  nameZh      String
+  nameJa      String?
+  nameEn      String?
+  description String?
+  commonCount Int?
+  hiddenCount Int?
+  generation  Int?
+
+  @@index([nameZh])
+}
+
+model Item {
+  id          Int    @id @default(autoincrement())
+  nameZh      String
+  nameJa      String?
+  nameEn      String?
+  type        String? // "item" or "category"
+  category    String? // parent category name if item
+  description String?
+  icon        String?
+
+  @@index([nameZh])
+}
