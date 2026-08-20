@@ -6,6 +6,7 @@ import { MoveModule } from './move/move.module';
 import { AbilityModule } from './ability/ability.module';
 import { ItemModule } from './item/item.module';
 import { BreedingModule } from './breeding/breeding.module';
+import { GeneticsModule } from './genetics/genetics.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { BreedingModule } from './breeding/breeding.module';
     AbilityModule,
     ItemModule,
     BreedingModule,
+    GeneticsModule,
   ],
 })
 export class AppModule {}

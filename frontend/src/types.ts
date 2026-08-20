@@ -214,3 +214,64 @@ export interface BreedingResult {
   mother: BreedingBrief
   father: BreedingBrief
 }
+
+export interface GeneticsBrief {
+  id: string
+  nameZh: string
+  nameEn: string | null
+  image: string | null
+  types: string[]
+  eggGroups: string[]
+  genderRatio: { male: number; female: number }
+}
+
+export interface GeneticsEggMove {
+  name: string
+  type: string
+  category: string
+  power: string
+  parents: { id: string | null; name: string }[]
+}
+
+export interface GeneticsEggMovesResponse {
+  target: GeneticsBrief
+  eggGroups: string[]
+  breedable: boolean
+  genderRatio: { male: number; female: number }
+  eggMoves: GeneticsEggMove[]
+}
+
+export interface GeneticsSolution {
+  type: 'direct' | 'chain'
+  stepCount: number
+  candidates?: GeneticsBrief[]
+  sharedEggGroup?: string
+  steps: {
+    father: GeneticsBrief
+    mother: GeneticsBrief
+    offspring: GeneticsBrief
+    sharedEggGroup: string
+    note: string
+  }[]
+  sharedEggGroups?: string[]
+}
+
+export interface GeneticsMoveResult {
+  move: string
+  valid: boolean
+  reason?: string
+  solutions?: GeneticsSolution[]
+}
+
+export interface GeneticsPlan {
+  target: GeneticsBrief
+  generation: number
+  specialNote?: string
+  moveResults: GeneticsMoveResult[]
+  combinedDirect?: {
+    father: GeneticsBrief
+    candidates: GeneticsBrief[]
+    sharedEggGroup: string
+    moves: string[]
+  }
+}

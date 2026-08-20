@@ -31,7 +31,7 @@ onMounted(initTheme)
       <router-link to="/abilities" active-class="nav-on">特性</router-link>
       <router-link to="/items" active-class="nav-on">道具</router-link>
       <router-link to="/egg-groups" active-class="nav-on">蛋组</router-link>
-      <router-link to="/breeding" active-class="nav-on">孵蛋</router-link>
+      <router-link to="/genetics" active-class="nav-on">遗传</router-link>
       <router-link to="/type-chart" active-class="nav-on">克制</router-link>
     </nav>
     <button

@@ -9,6 +9,7 @@ import ItemsView from '../views/ItemsView.vue'
 import TypeChartView from '../views/TypeChartView.vue'
 import EggGroupsView from '../views/EggGroupsView.vue'
 import BreedingSimView from '../views/BreedingSimView.vue'
+import GeneticsView from '../views/GeneticsView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -72,6 +73,12 @@ const router = createRouter({
       name: 'breeding',
       component: BreedingSimView,
       meta: { title: '孵蛋模拟器' },
+    },
+    {
+      path: '/genetics',
+      name: 'genetics',
+      component: GeneticsView,
+      meta: { title: '蛋招式遗传规划' },
     },
   ],
   scrollBehavior(_to, _from, savedPosition) {

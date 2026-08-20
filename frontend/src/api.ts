@@ -5,6 +5,9 @@ import type {
   BreedingMovesResponse,
   BreedingPlan,
   BreedingResult,
+  GeneticsBrief,
+  GeneticsEggMovesResponse,
+  GeneticsPlan,
 } from './types'
 
 const BASE = '/api'
@@ -237,3 +240,19 @@ export function postBreedingSimulate(body: {
 }
 
 export { get }
+
+export function listGeneticsSpecies(): Promise<GeneticsBrief[]> {
+  return get<GeneticsBrief[]>(`${BASE}/genetics/species`)
+}
+
+export function getGeneticsEggMoves(id: string): Promise<GeneticsEggMovesResponse> {
+  return get<GeneticsEggMovesResponse>(`${BASE}/genetics/species/${id}/moves`)
+}
+
+export function postGeneticsPlan(body: {
+  targetId: string
+  moves: string[]
+  generation: number
+}): Promise<GeneticsPlan> {
+  return post<GeneticsPlan>(`${BASE}/genetics/plan`, body)
+}
