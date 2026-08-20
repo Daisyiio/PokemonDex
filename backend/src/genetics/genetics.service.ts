@@ -213,9 +213,15 @@ export class GeneticsService {
 
     let specialNote: string | undefined;
     if (isGenderless) {
-      specialNote = `${target.nameZh} 为无性别宝可梦，只能与百变怪孵蛋。百变怪无法传递蛋招式，因此无法通过孵蛋获得蛋招式。`;
+      specialNote = `${target.nameZh} 为无性别宝可梦，只能与百变怪孵蛋。百变怪无法传递蛋招式。`;
+      if (generation >= 6) {
+        specialNote += `但在第9世代朱紫中，可通过「镜子香草」在野餐中让同种宝可梦共享蛋招式（无需孵蛋）。需先有一只已学会该招式的同种宝可梦。`;
+      }
     } else if (isAllMale) {
       specialNote = `${target.nameZh} 全部为雄性，无法作为母本进行孵蛋遗传蛋招式。`;
+      if (generation >= 6) {
+        specialNote += `但在第9世代朱紫中，可通过「镜子香草」在野餐中让同种宝可梦共享蛋招式（无需孵蛋）。需先有一只已学会该招式的同种宝可梦（可从其他世代传入）。`;
+      }
     }
 
     const unifiedPlan = this.buildUnifiedPlan(moves, target, generation, moveResults, isAllMale, isGenderless);
@@ -239,7 +245,15 @@ export class GeneticsService {
     isGenderless: boolean,
   ): any | null {
     if (moves.length <= 1) return null;
-    if (isAllMale || isGenderless) return null;
+    if (generation < 6 && (isAllMale || isGenderless)) return null;
+    if (generation >= 6 && (isAllMale || isGenderless)) {
+      return {
+        type: 'mirror-herb',
+        note: `${isGenderless ? '无性别' : '全雄性'}宝可梦无法通过孵蛋遗传蛋招式。但在第9世代朱紫中，可使用「镜子香草」在野餐中共享蛋招式：将一只已学会目标招式的同种宝可梦和一只携带镜子香草的同种宝可梦一起野餐，后者会自动学会该招式。`,
+        steps: [],
+        impossibleMoves: [],
+      };
+    }
 
     // Gen 5-: mother can't pass egg moves, so sequential stacking doesn't work
     if (generation < 6) {

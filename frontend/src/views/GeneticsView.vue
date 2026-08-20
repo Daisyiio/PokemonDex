@@ -188,7 +188,7 @@ onMounted(async () => {
 
       <!-- 统一方案（多招式时主输出） -->
       <div v-if="plan.unifiedPlan" class="unified-plan">
-        <div v-if="plan.unifiedPlan.type === 'gen5-limit'" class="gen5-note">
+        <div v-if="plan.unifiedPlan.type === 'gen5-limit' || plan.unifiedPlan.type === 'mirror-herb'" class="gen5-note">
           {{ plan.unifiedPlan.note }}
         </div>
         <template v-else>
