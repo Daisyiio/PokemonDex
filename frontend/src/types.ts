@@ -233,6 +233,7 @@ export interface GeneticsEggMove {
   power: string
   accuracy: string
   pp: string
+  marker?: string
   parents: { id: string | null; name: string }[]
 }
 
@@ -285,8 +286,10 @@ export interface GeneticsPlan {
       phase: string
       move?: string
       father: GeneticsBrief
+      candidates?: GeneticsBrief[]
       mother: GeneticsBrief
       offspring: GeneticsBrief
+      previousMoves?: string[]
       sharedEggGroup: string
       learnLevel?: string
       note: string

@@ -136,4 +136,15 @@ export class PokemonService {
       },
     };
   }
+
+  async encounters(id: string) {
+    const p = await this.prisma.pokemon.findUnique({ where: { id } });
+    if (!p) return null;
+    if (!p.encounters) return [];
+    try {
+      return JSON.parse(p.encounters);
+    } catch {
+      return [];
+    }
+  }
 }

@@ -3,26 +3,42 @@ import { ref, watch } from 'vue'
 
 const props = defineProps<{
   src: string
+  fallback?: string
   alt?: string
 }>()
 
-const failed = ref(false)
+const state = ref<'primary' | 'fallback' | 'failed'>('primary')
 
 watch(
   () => props.src,
   () => {
-    failed.value = false
+    state.value = 'primary'
   }
 )
+
+function onError() {
+  if (state.value === 'primary' && props.fallback) {
+    state.value = 'fallback'
+  } else {
+    state.value = 'failed'
+  }
+}
 </script>
 
 <template>
   <img
-    v-if="!failed"
+    v-if="state === 'primary'"
     :src="src"
     :alt="alt"
     loading="lazy"
-    @error="failed = true"
+    @error="onError"
+  />
+  <img
+    v-else-if="state === 'fallback'"
+    :src="fallback"
+    :alt="alt"
+    loading="lazy"
+    @error="onError"
   />
   <span v-else class="img-fallback" aria-hidden="true">
     <svg viewBox="0 0 100 100" stroke="currentColor" stroke-width="6" fill="none">

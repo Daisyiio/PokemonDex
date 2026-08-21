@@ -59,6 +59,19 @@ export function getPokemon(id: string): Promise<PokemonDetail> {
   return get<PokemonDetail>(`${BASE}/pokemon/${id}`)
 }
 
+export interface EncounterEntry {
+  gen: number
+  game: string
+  gameName?: string
+  location: string
+  method: string
+  note: string
+}
+
+export function getPokemonEncounters(id: string): Promise<EncounterEntry[]> {
+  return get<EncounterEntry[]>(`${BASE}/pokemon/${id}/encounters`)
+}
+
 export async function listTypes(): Promise<{ name: string; count: number }[]> {
   return get<{ name: string; count: number }[]>(`${BASE}/pokemon/types`)
 }

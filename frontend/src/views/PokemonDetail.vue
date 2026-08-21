@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { getPokemon, listPokemonIds, listAbilities, getMovesByGen, type PokemonNavItem, type MovesByGenResponse } from '../api'
+import { getPokemon, listPokemonIds, listAbilities, getMovesByGen, getPokemonEncounters, type PokemonNavItem, type MovesByGenResponse, type EncounterEntry } from '../api'
 import { imageUrl, typeColor } from '../types'
 import TypeBadge from '../components/TypeBadge.vue'
 import CategoryBadge from '../components/CategoryBadge.vue'
@@ -29,6 +29,7 @@ const abilityMap = ref<Record<string, string>>({})
 const abilityIdMap = ref<Record<string, string>>({})
 const moveGen = ref(9)
 const genMovesData = ref<MovesByGenResponse | null>(null)
+const encounters = ref<EncounterEntry[]>([])
 
 const navIndex = computed(() =>
   navList.value.findIndex((n) => n.id === route.params.id)
@@ -90,12 +91,14 @@ async function load() {
   detail.value = null
   moveGen.value = 9
   genMovesData.value = null
+  encounters.value = []
   try {
     const d = await getPokemon(route.params.id as string)
     detail.value = d
     document.title = `${d.name_zh} - 宝可梦图鉴`
     const names = d.forms[activeForm.value]?.abilities?.map((a) => a.name) ?? []
     loadAbilities(names)
+    getPokemonEncounters(route.params.id as string).then(e => { encounters.value = e }).catch(() => {})
   } catch {
     error.value = '未找到该宝可梦'
   }
@@ -211,7 +214,7 @@ const stats = () => detail.value?.stats[activeForm.value]?.data
 
 const radarData = computed(() => {
   const s = stats()
-  const order = ['hp', 'attack', 'defense', 'sp_attack', 'sp_defense', 'speed']
+  const order = ['hp', 'attack', 'defense', 'speed', 'sp_defense', 'sp_attack']
   if (!s) return { labels: [], values: [] }
   return {
     labels: order.map((k) => statLabels[k] || k),
@@ -239,7 +242,7 @@ const activeMoves = () => {
     const tab = activeTab.value
     if (tab === 'moves') return genMovesData.value.learnable.map((m) => ({ name: m.name, level: m.level || '—', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
     if (tab === 'machine') return genMovesData.value.machine.map((m) => ({ name: m.name, level: '', machine: m.tm || '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
-    if (tab === 'egg') return genMovesData.value.egg.map((m) => ({ name: m.name, level: '蛋', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
+    if (tab === 'egg') return genMovesData.value.egg.map((m) => ({ name: m.name, level: '蛋', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—', parents: m.parents }))
     if (tab === 'tutor') return genMovesData.value.tutor.map((m) => ({ name: m.name, level: '', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
   }
   const data = detail.value[MOVE_KEYS[activeTab.value]] as { form: string; data: MoveEntry[] }[]
@@ -261,6 +264,31 @@ watch(moveGen, (g) => {
 
 function evolutionImage(node: EvolutionNode): string {
   return imageUrl('dream', node.image || '')
+}
+
+function evolutionImageFallback(node: EvolutionNode): string | undefined {
+  if (!detail.value) return undefined
+  const targetForm = node.form_name
+  const targetName = node.name
+  for (const f of detail.value.forms) {
+    if (targetForm && f.name === targetForm) {
+      return imageUrl('official', f.image)
+    }
+    if (!targetForm && f.name === targetName) {
+      return imageUrl('official', f.image)
+    }
+  }
+  if (targetForm) {
+    const evoParen = targetForm.match(/（[^）]+）$/)
+    if (evoParen) {
+      for (const f of detail.value.forms) {
+        if (f.name.endsWith(evoParen[0])) {
+          return imageUrl('official', f.image)
+        }
+      }
+    }
+  }
+  return undefined
 }
 
 function typeEffectData() {
@@ -350,6 +378,15 @@ function basePointsText(list: Form['base_points'] | undefined): string {
     .filter((p) => p.value > 0)
     .map((p) => `${statLabels[p.stat] || p.stat}+${p.value}`)
   return parts.length ? parts.join('、') : '—'
+}
+
+function methodClass(method: string): string {
+  if (method === '野生') return 'wild'
+  if (method === '交换') return 'trade'
+  if (method.includes('极巨')) return 'raid'
+  if (method === '宝可追踪') return 'radar'
+  if (method.includes('定点') || method.includes('可见')) return 'overworld'
+  return ''
 }
 </script>
 
@@ -602,6 +639,7 @@ function basePointsText(list: Form['base_points'] | undefined): string {
               <SafeImage
                 v-if="node.image"
                 :src="evolutionImage(node)"
+                :fallback="evolutionImageFallback(node)"
                 :alt="node.name"
               />
               <span v-else class="evo-unknown">?</span>
@@ -658,22 +696,29 @@ function basePointsText(list: Form['base_points'] | undefined): string {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="m in activeMoves()" :key="m.name + m.level + m.machine">
-              <td class="num">{{ activeTab === 'tutor' ? '—' : (m.machine || m.level || '—') }}</td>
-              <td class="move-name">{{ m.name }}</td>
-              <td>
-                <span class="type-badge" :style="{ background: typeColor(m.type) }">
-                  <span class="picon" :class="`picon-t-${m.type}`" />
-                  {{ m.type }}
-                </span>
-              </td>
-              <td class="cat-cell">
-                <CategoryBadge :category="m.category" />
-              </td>
-              <td class="num">{{ m.power }}</td>
-              <td class="num">{{ m.accuracy }}</td>
-              <td class="num">{{ m.pp }}</td>
-            </tr>
+            <template v-for="m in activeMoves()" :key="m.name + m.level + m.machine">
+              <tr>
+                <td class="num">{{ activeTab === 'tutor' ? '—' : (m.machine || m.level || '—') }}</td>
+                <td class="move-name">{{ m.name }}</td>
+                <td>
+                  <span class="type-badge" :style="{ background: typeColor(m.type) }">
+                    <span class="picon" :class="`picon-t-${m.type}`" />
+                    {{ m.type }}
+                  </span>
+                </td>
+                <td class="cat-cell">
+                  <CategoryBadge :category="m.category" />
+                </td>
+                <td class="num">{{ m.power }}</td>
+                <td class="num">{{ m.accuracy }}</td>
+                <td class="num">{{ m.pp }}</td>
+              </tr>
+              <tr v-if="activeTab === 'egg' && m.parents && m.parents.length" class="egg-parent-row">
+                <td colspan="7" class="egg-parents">
+                  遗传来源：{{ m.parents.map((p) => p.name).join('、') }}
+                </td>
+              </tr>
+            </template>
             <tr v-if="activeMoves().length === 0">
               <td colspan="7" class="empty">暂无数据</td>
             </tr>
@@ -722,6 +767,35 @@ function basePointsText(list: Form['base_points'] | undefined): string {
       </div>
     </section>
 
+    <section v-if="encounters.length" class="section">
+      <h2>获得方式</h2>
+      <div class="encounter-table-wrap">
+        <table class="encounter-table">
+          <thead>
+            <tr>
+              <th>世代</th>
+              <th>版本</th>
+              <th>地点</th>
+              <th>方式</th>
+              <th>备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(e, i) in encounters" :key="i">
+              <td class="num">第{{ e.gen }}世代</td>
+              <td>{{ e.gameName || e.game }}</td>
+              <td>{{ e.location || '—' }}</td>
+              <td>
+                <span v-if="e.method" class="method-tag" :class="methodClass(e.method)">{{ e.method }}</span>
+                <span v-else>—</span>
+              </td>
+              <td class="note-cell">{{ e.note || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section v-if="detail.names?.length" class="section">
       <h2>名字由来</h2>
       <div class="name-list">
@@ -767,19 +841,20 @@ function basePointsText(list: Form['base_points'] | undefined): string {
 .back {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  color: var(--accent);
-  background: none;
+  gap: 4px;
   border: none;
-  padding: 0;
-  cursor: pointer;
-  margin-bottom: 16px;
+  background: none;
+  color: var(--text-2);
   font-size: 14px;
-  font-weight: 500;
-  transition: opacity 0.15s;
+  cursor: pointer;
+  padding: 6px 10px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
 }
 .back:hover {
-  opacity: 0.7;
+  background: var(--surface-3);
+  color: var(--text);
 }
 .back-icon {
   font-size: 18px;
@@ -1458,7 +1533,10 @@ function basePointsText(list: Form['base_points'] | undefined): string {
   font-size: 13px;
   outline: none;
   float: right;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  cursor: pointer;
 }
+.gen-select:hover { border-color: var(--accent); }
 .gen-select:focus { border-color: var(--accent); }
 
 .table-wrap {
@@ -1501,6 +1579,15 @@ function basePointsText(list: Form['base_points'] | undefined): string {
 .move-name {
   font-weight: 600;
 }
+.egg-parent-row {
+  background: none !important;
+}
+.egg-parents {
+  font-size: 12px;
+  color: var(--text-faint);
+  padding: 2px 8px 6px !important;
+  border-top: none !important;
+}
 .empty {
   text-align: center;
   color: var(--text-3);
@@ -1516,6 +1603,76 @@ function basePointsText(list: Form['base_points'] | undefined): string {
   padding: 3px 10px 3px 4px;
   border-radius: 20px;
   line-height: 1;
+}
+
+.encounter-table-wrap {
+  overflow: auto;
+  max-height: 400px;
+  border: 1px solid var(--border-faint);
+  border-radius: 12px;
+}
+.encounter-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.encounter-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--table-head-bg);
+  z-index: 1;
+}
+.encounter-table th,
+.encounter-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-faint);
+  text-align: left;
+  white-space: nowrap;
+}
+.encounter-table th {
+  color: var(--text-3);
+  font-weight: 600;
+  font-size: 12px;
+}
+.encounter-table td.num {
+  text-align: center;
+  color: var(--text-3);
+}
+.encounter-table tbody tr:hover {
+  background: var(--hover-bg);
+}
+.encounter-table .note-cell {
+  white-space: normal;
+  max-width: 200px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.method-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.method-tag.wild {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.method-tag.trade {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+.method-tag.raid {
+  background: #fce4ec;
+  color: #c62828;
+}
+.method-tag.radar {
+  background: #fff3e0;
+  color: #e65100;
+}
+.method-tag.overworld {
+  background: #f3e5f5;
+  color: #6a1b9a;
 }
 
 .nav-buttons {
@@ -1772,6 +1929,80 @@ function basePointsText(list: Form['base_points'] | undefined): string {
   }
   .moves-table tbody tr:hover {
     background: var(--surface-2);
+  }
+  .encounter-table-wrap {
+    max-height: none;
+    overflow: visible;
+    border: none;
+  }
+  .encounter-table,
+  .encounter-table tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .encounter-table thead {
+    display: none;
+  }
+  .encounter-table tr {
+    display: grid;
+    grid-template-areas:
+      'game method'
+      'loc  loc'
+      'note note';
+    grid-template-columns: 1fr auto;
+    gap: 4px 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-faint);
+    border-radius: 10px;
+    min-width: 0;
+  }
+  .encounter-table td {
+    display: block;
+    border: none;
+    padding: 0;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .encounter-table td:nth-child(1) {
+    display: none;
+  }
+  .encounter-table td:nth-child(2) {
+    grid-area: game;
+    font-weight: 600;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .encounter-table td:nth-child(3) {
+    grid-area: loc;
+    font-size: 12px;
+    color: var(--text-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .encounter-table td:nth-child(4) {
+    grid-area: method;
+    text-align: right;
+    justify-self: end;
+  }
+  .encounter-table td:nth-child(5) {
+    grid-area: note;
+    font-size: 12px;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
 }
 </style>

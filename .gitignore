@@ -6,17 +6,16 @@ dist/
 dist-ssr/
 *.tsbuildinfo
 
-# database (regenerable via npm run db:import)
-backend/prisma/dev.db
-backend/prisma/dev.db-journal
-
 # environment
 .env
 .env.local
 *.local
 
-# dataset (transferred separately, ~120MB)
+# dataset (only needed for db:import, images are embedded in backend/public/)
 pokemon-dataset-zh-main/
+
+# temp backups
+*.bak.json
 
 # archives
 *.zip

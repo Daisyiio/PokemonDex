@@ -953,7 +953,10 @@ onMounted(async () => {
   color: var(--text);
   font-size: 13px;
   outline: none;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  cursor: pointer;
 }
+.nat select:hover { border-color: var(--accent); }
 
 .result {
   background: var(--surface);

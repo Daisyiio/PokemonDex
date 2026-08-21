@@ -30,6 +30,8 @@ export class GeneticsService {
   private static nameZhToId: Map<string, string> | null = null;
   private static eggMovesByGen: Map<string, Map<string, Map<string, any>>> | null = null;
   private static eggReceiversByGen: Map<string, Map<string, Set<string>>> | null = null;
+  private static movesByGenCache: any = null;
+  private static moveKnowersByGen: Map<string, Map<string, Set<string>>> | null = null;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -150,26 +152,41 @@ export class GeneticsService {
     const filePath = path.join(process.cwd(), 'data', 'moves_by_gen.json');
     if (!fs.existsSync(filePath)) return;
     const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    GeneticsService.movesByGenCache = data;
     const byGen = new Map<string, Map<string, Map<string, any>>>();
     const receiversByGen = new Map<string, Map<string, Set<string>>>();
+    const knowersByGen = new Map<string, Map<string, Set<string>>>();
     for (const [gen, species] of Object.entries(data)) {
       const genMap = new Map<string, Map<string, any>>();
       const recvMap = new Map<string, Set<string>>();
+      const knowersMap = new Map<string, Set<string>>();
       for (const [id, info] of Object.entries(species as any)) {
         const moveMap = new Map<string, any>();
         for (const m of (info as any).egg || []) {
-          moveMap.set(m.name, { type: m.type || '', category: m.category || '', power: m.power || '', accuracy: m.accuracy || '', pp: m.pp || '', parents: m.parents || [] });
+          moveMap.set(m.name, { type: m.type || '', category: m.category || '', power: m.power || '', accuracy: m.accuracy || '', pp: m.pp || '', marker: m.marker || '', parents: m.parents || [] });
           let set = recvMap.get(m.name);
           if (!set) { set = new Set(); recvMap.set(m.name, set); }
           set.add(id);
         }
         genMap.set(id, moveMap);
+        // species that can LEARN this move in this gen (by level-up / TM / tutor)
+        const learns = new Set<string>();
+        for (const m of (info as any).learnable || []) learns.add(m.name);
+        for (const m of (info as any).machine || []) learns.add(m.name);
+        for (const m of (info as any).tutor || []) learns.add(m.name);
+        for (const moveName of learns) {
+          let set = knowersMap.get(moveName);
+          if (!set) { set = new Set(); knowersMap.set(moveName, set); }
+          set.add(id);
+        }
       }
       byGen.set(gen, genMap);
       receiversByGen.set(gen, recvMap);
+      knowersByGen.set(gen, knowersMap);
     }
     GeneticsService.eggMovesByGen = byGen;
     GeneticsService.eggReceiversByGen = receiversByGen;
+    GeneticsService.moveKnowersByGen = knowersByGen;
   }
 
   async allMovesByGen(id: string, gen?: number) {
@@ -180,10 +197,7 @@ export class GeneticsService {
       return { generation: 9, learnable: [], machine: [], egg: [], tutor: [] };
     }
     await this.loadEggMovesByGen();
-    const filePath = path.join(process.cwd(), 'data', 'moves_by_gen.json');
-    if (!fs.existsSync(filePath)) return { generation: gen, learnable: [], machine: [], egg: [], tutor: [] };
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    const species = raw[String(gen)]?.[id];
+    const species = GeneticsService.movesByGenCache?.[String(gen)]?.[id];
     if (!species) return { generation: gen, learnable: [], machine: [], egg: [], tutor: [] };
     return {
       generation: gen,
@@ -212,7 +226,37 @@ export class GeneticsService {
     return { id: s.id, nameZh: s.nameZh, nameEn: s.nameEn, image: s.image, types: s.types, eggGroups: s.eggGroups, genderRatio: s.genderRatio };
   }
 
-  private getLearnLevel(speciesId: string, moveName: string): string {
+  /**
+   * 蛋招式获取途径标记 (52poke 约定):
+   *   "" - 本世代存在蛋组兼容的直接父本，可直接遗传
+   *   "*" - 需要连锁遗传 (本世代存在会该招式的宝可梦，但蛋组不兼容，需搭桥中转)
+   *   "‡" - 需前代/其他世代传入 (本世代没有任何合法途径学会)
+   */
+  private eggMoveMarker(target: SpeciesInfo, moveName: string, generation: number): string {
+    if (generation < 2 || generation > 8) return '';
+    const knowers = GeneticsService.moveKnowersByGen?.get(String(generation))?.get(moveName) || new Set<string>();
+    if (knowers.size === 0) return '‡';
+    for (const id of knowers) {
+      const s = GeneticsService.byId!.get(id);
+      if (!s || !s.breedable || s.genderRatio.male <= 0) continue;
+      if (this.sharesEggGroup(s, target)) return '';
+    }
+    return '*';
+  }
+
+  private getLearnLevel(speciesId: string, moveName: string, generation?: number): string {
+    // authoritative per-generation data
+    if (generation && generation >= 2 && generation <= 8) {
+      const species = GeneticsService.movesByGenCache?.[String(generation)]?.[speciesId];
+      if (species?.learnable) {
+        const found = species.learnable.find((m: any) => m.name === moveName);
+        if (found) return found.level || '?';
+      }
+      if (species?.machine) {
+        const found = species.machine.find((m: any) => m.name === moveName);
+        if (found) return 'TM';
+      }
+    }
     const d = GeneticsService.detailCache!.get(speciesId);
     if (!d) return '?';
     for (const g of d.learnable_moves || []) {
@@ -257,6 +301,7 @@ export class GeneticsService {
         type: def.type,
         category: def.category,
         power: def.power,
+        marker: def.marker !== undefined && def.marker !== '' ? def.marker : this.eggMoveMarker(info, name, gen || 9),
         parents: def.parents,
       })),
     };
@@ -357,7 +402,7 @@ export class GeneticsService {
         // Direct father: one stacking step
         const fatherInfo = directSol.candidates[0];
         const father = GeneticsService.byId!.get(fatherInfo.id)!;
-        const level = this.getLearnLevel(father.id, move);
+        const level = this.getLearnLevel(father.id, move, generation);
         const eg = this.sharesEggGroup(father, target) || '?';
         knownMoves.push(move);
         const prevMoves = knownMoves.length > 1 ? `（母方已携带${knownMoves.slice(0, -1).join('、')}）` : '';
@@ -365,8 +410,10 @@ export class GeneticsService {
           phase: 'stacking',
           move,
           father: fatherInfo,
+          candidates: directSol.candidates.slice(1),
           mother: this.info(target),
           offspring: this.info(target),
+          previousMoves: knownMoves.slice(0, -1),
           sharedEggGroup: eg,
           learnLevel: level,
           note: `父方${father.nameZh}${this.levelText(level)}「${move}」${prevMoves}，放入饲育屋，子代${target.nameZh}携带${knownMoves.join('、')}`,
@@ -388,6 +435,7 @@ export class GeneticsService {
               ...step,
               phase: 'chain-final',
               move,
+              previousMoves: knownMoves.slice(0, -1),
               note: `公的${step.father.nameZh}（携带「${move}」）${prevMoves}× 母的${step.mother.nameZh} → 子代${target.nameZh}，携带${knownMoves.join('、')}`,
             });
           } else {
@@ -433,13 +481,13 @@ export class GeneticsService {
     }
     if (directCandidates.length > 0) {
       const eg = this.sharesEggGroup(directCandidates[0], target)!;
-      const lv = this.getLearnLevel(directCandidates[0].id, move);
+      const lv = this.getLearnLevel(directCandidates[0].id, move, generation);
       solutions.push({
         type: 'direct',
         stepCount: 1,
         candidates: directCandidates.map((s) => ({
           ...this.info(s),
-          learnLevel: this.getLearnLevel(s.id, move),
+          learnLevel: this.getLearnLevel(s.id, move, generation),
         })),
         sharedEggGroup: eg,
         steps: [{
@@ -503,7 +551,7 @@ export class GeneticsService {
       const eg = this.sharesEggGroup(current, target);
       if (eg && current.genderRatio.male > 0) {
         // Found chain! path → target
-        const steps = this.buildSteps(path, target, move);
+        const steps = this.buildSteps(path, target, move, generation);
         results.push({
           type: 'chain',
           stepCount: path.length,
@@ -528,7 +576,7 @@ export class GeneticsService {
     return results;
   }
 
-  private buildSteps(path: SpeciesInfo[], target: SpeciesInfo, move: string): any[] {
+  private buildSteps(path: SpeciesInfo[], target: SpeciesInfo, move: string, generation?: number): any[] {
     const steps: any[] = [];
     for (let i = 0; i < path.length; i++) {
       const father = path[i];
@@ -539,7 +587,7 @@ export class GeneticsService {
       const isFirst = i === 0;
       let note: string;
       if (isFirst) {
-        const lv = this.getLearnLevel(father.id, move);
+        const lv = this.getLearnLevel(father.id, move, generation);
         const lvText = this.levelText(lv);
         if (isLast) {
           note = `父方${father.nameZh}${lvText}「${move}」，放入饲育屋，出生子代${target.nameZh}自带「${move}」`;
@@ -593,7 +641,7 @@ export class GeneticsService {
       candidates: combined.map((s) => this.info(s)),
       sharedEggGroup: eg,
       moves,
-      learnInfo: moves.map((m) => ({ move: m, level: this.getLearnLevel(combined[0].id, m) })),
+      learnInfo: moves.map((m) => ({ move: m, level: this.getLearnLevel(combined[0].id, m, generation) })),
     };
   }
 }

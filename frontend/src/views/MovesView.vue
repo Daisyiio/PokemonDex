@@ -122,8 +122,8 @@ load()
         class="move-card"
       >
         <div class="mc-head">
+          <span class="mc-id">{{ m.id }}</span>
           <span class="mc-name">{{ m.nameZh }}</span>
-          <span class="mc-gen" v-if="m.generation">第 {{ m.generation }} 世代</span>
         </div>
         <div class="mc-badges">
           <TypeBadge v-if="m.type" :type="m.type" size="sm" />
@@ -141,16 +141,6 @@ load()
           <span class="stat">
             <span class="stat-label">PP</span>
             <b>{{ m.pp || '—' }}</b>
-          </span>
-        </div>
-        <div class="mc-machines" v-if="m.machines?.length">
-          <span
-            v-for="mc in m.machines"
-            :key="mc"
-            class="tm-chip"
-            :class="mc.startsWith('TM') ? 'tm' : 'tr'"
-          >
-            {{ mc }}
           </span>
         </div>
         <p class="mc-desc" v-if="m.description">{{ m.description }}</p>
@@ -297,18 +287,19 @@ load()
 .mc-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+}
+.mc-id {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  min-width: 28px;
+  text-align: right;
 }
 .mc-name {
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
-}
-.mc-gen {
-  font-size: 11px;
-  color: var(--text-3);
-  white-space: nowrap;
 }
 .mc-badges {
   display: flex;

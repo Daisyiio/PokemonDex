@@ -8,16 +8,17 @@ datasource db {
 }
 
 model Pokemon {
-  id     String @id // pokedex_id, e.g. "0001"
-  nameZh String
-  nameJa String?
-  nameEn String?
-  types  String // JSON array of type names, e.g. ["草","毒"]
-  gen    Int?
-  filter String?
-  icon   String?
-  image  String? // official image filename, e.g. "0001-妙蛙种子.png"
-  detail String // full detail JSON (the original file content)
+  id        String  @id // pokedex_id, e.g. "0001"
+  nameZh    String
+  nameJa    String?
+  nameEn    String?
+  types     String // JSON array of type names, e.g. ["草","毒"]
+  gen       Int?
+  filter    String?
+  icon      String?
+  image     String? // official image filename, e.g. "0001-妙蛙种子.png"
+  detail    String // full detail JSON (the original file content)
+  encounters String? // JSON encounter data from 52poke wiki
 
   @@index([nameZh])
   @@index([nameEn])
