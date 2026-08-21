@@ -18,6 +18,9 @@ pokemon-dataset-zh-main/
 # temp backups
 *.bak.json
 
+# 图片资源（体积大，不提交；从 pokemon-dataset-zh-main/data/images/ 复制）
+backend/public/images/
+
 # archives
 *.zip
 
