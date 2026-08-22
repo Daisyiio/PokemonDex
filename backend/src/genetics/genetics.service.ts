@@ -273,6 +273,14 @@ export class GeneticsService {
     return `需升级至 Lv.${level} 习得`;
   }
 
+  private getBaseForm(species: SpeciesInfo): SpeciesInfo {
+    for (const id of species.lineIds) {
+      const s = GeneticsService.byId!.get(id);
+      if (s?.isBaseForm) return s;
+    }
+    return species;
+  }
+
   async species() {
     await this.load();
     return GeneticsService.order!.filter((s) => s.breedable && s.isBaseForm).map((s) => this.info(s));
@@ -302,7 +310,10 @@ export class GeneticsService {
         category: def.category,
         power: def.power,
         marker: def.marker !== undefined && def.marker !== '' ? def.marker : this.eggMoveMarker(info, name, gen || 9),
-        parents: def.parents,
+        parents: (def.parents || []).filter((p: any) => {
+          const s = GeneticsService.byId!.get(p.id);
+          return s && s.breedable && s.genderRatio.male > 0 && this.sharesEggGroup(s, info);
+        }),
       })),
     };
   }
@@ -349,6 +360,8 @@ export class GeneticsService {
 
     return {
       target: this.info(target),
+      targetEggGroups: target.eggGroups,
+      targetGenderRatio: target.genderRatio,
       generation,
       specialNote,
       moveResults,
@@ -390,7 +403,8 @@ export class GeneticsService {
     const allSteps: any[] = [];
     const knownMoves: string[] = [];
 
-    for (const move of moves) {
+    for (let moveIdx = 0; moveIdx < moves.length; moveIdx++) {
+      const move = moves[moveIdx];
       const mr = moveResults.find((r) => r.move === move);
       if (!mr?.valid || !mr.solutions || mr.solutions.length === 0) {
         impossible.push({ move, reason: mr?.reason || '无可用遗传路径' });
@@ -406,6 +420,8 @@ export class GeneticsService {
         const eg = this.sharesEggGroup(father, target) || '?';
         knownMoves.push(move);
         const prevMoves = knownMoves.length > 1 ? `（母方已携带${knownMoves.slice(0, -1).join('、')}）` : '';
+        const needsNextStep = moveIdx < moves.length - 1;
+        const femaleRate = target.genderRatio.female;
         allSteps.push({
           phase: 'stacking',
           move,
@@ -416,7 +432,17 @@ export class GeneticsService {
           previousMoves: knownMoves.slice(0, -1),
           sharedEggGroup: eg,
           learnLevel: level,
+          needsNextStep,
+          femaleRate,
+          successRatePerStep: needsNextStep ? femaleRate / 100 : 1,
           note: `父方${father.nameZh}${this.levelText(level)}「${move}」${prevMoves}，放入饲育屋，子代${target.nameZh}携带${knownMoves.join('、')}`,
+          genderNote: needsNextStep && femaleRate > 0 && femaleRate < 100
+            ? `此步子代需为♀（${femaleRate}%概率），若为♂需重孵`
+            : needsNextStep && femaleRate === 100
+              ? '子代必定为♀，可直接进入下一步'
+              : needsNextStep && femaleRate === 0
+                ? '子代全为♂，无法继续叠加，请寻找同时学会所有招式的父方'
+                : '',
         });
       } else {
         // Chain: use chain steps (last step is the stacking step)
@@ -449,12 +475,24 @@ export class GeneticsService {
       return { type: 'impossible', steps: [], impossibleMoves: impossible, note: '所有招式均无法遗传。' };
     }
 
+    // 计算累计成功率
+    let cumulativeSuccessRate = 1;
+    for (const step of allSteps) {
+      if (step.needsNextStep && step.successRatePerStep < 1) {
+        cumulativeSuccessRate *= step.successRatePerStep;
+      }
+    }
+
     return {
       type: allSteps.some((s) => s.phase === 'chain-prep' || s.phase === 'chain-final') ? 'mixed' : 'sequential',
       totalSteps: allSteps.length,
       steps: allSteps,
       impossibleMoves: impossible,
       knownMoves,
+      cumulativeSuccessRate,
+      successRatePercent: Math.round(cumulativeSuccessRate * 100),
+      needsRetry: cumulativeSuccessRate < 1,
+      estimatedRetries: cumulativeSuccessRate > 0 ? Math.ceil(1 / cumulativeSuccessRate) : Infinity,
     };
   }
 
@@ -529,6 +567,10 @@ export class GeneticsService {
       const s = byId.get(id);
       if (!s || !s.breedable || s.id === target.id) continue;
       if (s.genderRatio.male === 0) continue;
+      // 中间宝可梦的基础形态必须能学会该招式（因为子代是基础形态）
+      const baseForm = this.getBaseForm(s);
+      const baseCanLearn = learners.has(baseForm.id) || receivers.has(baseForm.id);
+      if (!baseCanLearn) continue;
       intermediates.push(s);
     }
 
@@ -567,7 +609,6 @@ export class GeneticsService {
         if (visited.has(inter.id)) continue;
         const interEg = this.sharesEggGroup(current, inter);
         if (!interEg) continue;
-        // Intermediate must be able to receive the move (it's in receivers, checked above)
         visited.add(inter.id);
         queue.push({ current: inter, path: [...path, inter] });
       }
@@ -581,7 +622,7 @@ export class GeneticsService {
     for (let i = 0; i < path.length; i++) {
       const father = path[i];
       const mother = i < path.length - 1 ? path[i + 1] : target;
-      const offspring = mother;
+      const offspring = i < path.length - 1 ? this.getBaseForm(mother) : target;
       const eg = this.sharesEggGroup(father, mother);
       const isLast = i === path.length - 1;
       const isFirst = i === 0;
@@ -592,12 +633,12 @@ export class GeneticsService {
         if (isLast) {
           note = `父方${father.nameZh}${lvText}「${move}」，放入饲育屋，出生子代${target.nameZh}自带「${move}」`;
         } else {
-          note = `父方${father.nameZh}${lvText}「${move}」，与母的${mother.nameZh}配对 → 产出公的${mother.nameZh}，已学会「${move}」`;
+          note = `父方${father.nameZh}${lvText}「${move}」，与母的${mother.nameZh}配对 → 产出${offspring.nameZh}，已学会「${move}」`;
         }
       } else {
         note = isLast
           ? `公的${father.nameZh}（携带「${move}」）× 母的${mother.nameZh} → 产出子代${target.nameZh}，携带「${move}」`
-          : `公的${father.nameZh}（携带「${move}」）× 母的${mother.nameZh} → 产出公的${mother.nameZh}，已学会「${move}」`;
+          : `公的${father.nameZh}（携带「${move}」）× 母的${mother.nameZh} → 产出${offspring.nameZh}，已学会「${move}」`;
       }
       steps.push({
         father: this.info(father),
@@ -642,6 +683,156 @@ export class GeneticsService {
       sharedEggGroup: eg,
       moves,
       learnInfo: moves.map((m) => ({ move: m, level: this.getLearnLevel(combined[0].id, m, generation) })),
+    };
+  }
+
+  /**
+   * 简易模式：查找所有可直接遗传目标招式的亲代
+   * includePrevGen=false（默认）：只查本世代原生可学的亲代
+   * includePrevGen=true：合并历代（2~当前世代）可学该招式的亲代，标注"前代传入"
+   */
+  async findDirectParents(targetId: string, moves: string[], generation: number, includePrevGen = false) {
+    await this.load();
+    if (generation >= 2 && generation <= 8) await this.loadEggMovesByGen();
+    const byId = GeneticsService.byId!;
+    const target = byId.get(targetId);
+    if (!target) throw new BadRequestException('宝可梦不存在');
+    if (!target.breedable) throw new BadRequestException(`${target.nameZh} 属于「未发现蛋组」，无法生蛋`);
+
+    const eggMap = this.getEggMapForGen(targetId, generation);
+    const isAllMale = target.genderRatio.female === 0 && !this.isGenderless(target);
+    const isGenderless = this.isGenderless(target);
+
+    if (isAllMale || isGenderless) {
+      return {
+        target: this.info(target),
+        targetEggGroups: target.eggGroups,
+        generation,
+        requestedMoves: moves,
+        parents: [],
+        summary: { total: 0, fullCover: 0, partialCover: 0 },
+        note: isGenderless
+          ? `${target.nameZh} 为无性别宝可梦，只能与百变怪孵蛋。百变怪无法传递蛋招式。第9世代可通过「镜子香草」共享蛋招式。`
+          : `${target.nameZh} 全部为雄性，无法作为母本孵蛋遗传。第9世代可通过「镜子香草」共享蛋招式。`,
+      };
+    }
+
+    // 收集所有直接亲代
+    const parentMap = new Map<string, {
+      info: SpeciesInfo;
+      sharedMoves: string[];
+      eggGroup: string;
+      learnInfos: { move: string; level: string; isTM: boolean; fromPrevGen: boolean }[];
+    }>();
+
+    // 本世代的 knower 集合（用于判断是否"前代传入"）
+    const currentGenKnowers = new Set<string>(
+      GeneticsService.moveKnowersByGen?.get(String(generation))?.get('') || []
+    );
+
+    for (const move of moves) {
+      const def = eggMap.get(move);
+      if (!def) continue;
+
+      // 本世代知道该招式的 id 集合（用于标注 fromPrevGen）
+      const knowersThisGen = GeneticsService.moveKnowersByGen?.get(String(generation))?.get(move) || new Set<string>();
+
+      // 从 egg moves 的 parents 列表找直接亲代
+      const parentIds = new Set<string>();
+      if (def.parents) {
+        for (const p of def.parents) {
+          const s = byId.get(p.id);
+          if (s && s.breedable && s.genderRatio.male > 0 && this.sharesEggGroup(s, target)) {
+            parentIds.add(p.id);
+          }
+        }
+      }
+
+      // 如果 parents 列表不够，用 moveKnowersByGen 补充
+      if (parentIds.size === 0) {
+        const knowers = knowersThisGen;
+        for (const id of knowers) {
+          const s = byId.get(id);
+          if (s && s.breedable && s.genderRatio.male > 0 && this.sharesEggGroup(s, target)) {
+            parentIds.add(id);
+          }
+        }
+      }
+
+      // 宽松模式：合并历代（2~gen-1）的 knowers
+      if (includePrevGen && generation >= 2 && generation <= 8) {
+        for (let g = 2; g < generation; g++) {
+          const prevKnowers = GeneticsService.moveKnowersByGen?.get(String(g))?.get(move) || new Set<string>();
+          for (const id of prevKnowers) {
+            const s = byId.get(id);
+            if (s && s.breedable && s.genderRatio.male > 0 && this.sharesEggGroup(s, target)) {
+              parentIds.add(id);
+            }
+          }
+        }
+      }
+
+      for (const pid of parentIds) {
+        const s = byId.get(pid)!;
+        const eg = this.sharesEggGroup(s, target)!;
+        const level = this.getLearnLevel(pid, move, generation);
+        const isTM = level === 'TM';
+        const fromPrevGen = includePrevGen && !knowersThisGen.has(pid);
+        const existing = parentMap.get(pid);
+        if (existing) {
+          existing.sharedMoves.push(move);
+          existing.learnInfos.push({ move, level, isTM, fromPrevGen });
+        } else {
+          parentMap.set(pid, {
+            info: s,
+            sharedMoves: [move],
+            eggGroup: eg,
+            learnInfos: [{ move, level, isTM, fromPrevGen }],
+          });
+        }
+      }
+    }
+
+    // 转换为输出格式
+    const parents = Array.from(parentMap.values())
+      .sort((a, b) => b.sharedMoves.length - a.sharedMoves.length || a.info.id.localeCompare(b.info.id))
+      .map((p) => {
+        const hasPrevGen = p.learnInfos.some((li) => li.fromPrevGen);
+        return {
+          ...this.info(p.info),
+          sharedEggGroup: p.eggGroup,
+          sharedMoves: p.sharedMoves,
+          allMovesCovered: p.sharedMoves.length === moves.length,
+          learnInfos: p.learnInfos.map((li) => ({
+            move: li.move,
+            level: li.level,
+            levelText: this.levelText(li.level),
+            isTM: li.isTM,
+            note: li.isTM ? '招式机' : this.levelText(li.level),
+            fromPrevGen: li.fromPrevGen,
+          })),
+          hasPrevGen,
+          note: p.sharedMoves.length < moves.length
+            ? `只能遗传 ${p.sharedMoves.length}/${moves.length} 个招式，需搭配其他亲代补全`
+            : hasPrevGen
+              ? '可遗传全部招式（部分需前代传送）'
+              : p.learnInfos.some((li) => li.level === '?')
+                ? '部分招式学习等级不确定，请确认实际可学'
+                : '可一次性遗传全部目标招式',
+        };
+      });
+
+    return {
+      target: this.info(target),
+      targetEggGroups: target.eggGroups,
+      generation,
+      requestedMoves: moves,
+      parents,
+      summary: {
+        total: parents.length,
+        fullCover: parents.filter((p) => p.allMovesCovered).length,
+        partialCover: parents.filter((p) => !p.allMovesCovered).length,
+      },
     };
   }
 }

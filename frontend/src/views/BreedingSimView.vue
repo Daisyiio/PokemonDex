@@ -517,7 +517,6 @@ onMounted(async () => {
 }
 .step.on {
   color: var(--accent);
-  border-color: var(--accent);
   background: var(--accent-soft);
 }
 .step.on .step-no {

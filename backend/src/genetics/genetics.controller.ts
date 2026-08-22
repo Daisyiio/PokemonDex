@@ -20,6 +20,11 @@ export class GeneticsController {
     return this.geneticsService.allMovesByGen(id, gen ? Number(gen) : undefined);
   }
 
+  @Post('direct-parents')
+  directParents(@Body() body: { targetId: string; moves?: string[]; generation?: number; includePrevGen?: boolean }) {
+    return this.geneticsService.findDirectParents(body.targetId, body.moves || [], body.generation || 6, body.includePrevGen || false);
+  }
+
   @Post('plan')
   plan(@Body() body: { targetId: string; moves?: string[]; generation?: number }) {
     return this.geneticsService.plan(body.targetId, body.moves || [], body.generation || 6);

@@ -4,6 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { getAbility, type AbilityDetail } from '../api'
 import { imageUrl } from '../types'
 import SafeImage from '../components/SafeImage.vue'
+import { useScrollMemory } from '../composables/useScrollMemory'
+
+useScrollMemory()
 
 const route = useRoute()
 const router = useRouter()
@@ -78,7 +81,8 @@ onMounted(async () => {
               />
               <span v-else class="learner-unknown">?</span>
             </div>
-            <div class="learner-name">#{{ l.id }} {{ l.nameZh }}</div>
+            <div class="learner-id">#{{ l.id }}</div>
+            <div class="learner-name">{{ l.nameZh }}</div>
             <div class="learner-methods">
               <span
                 v-for="m in l.methods"
@@ -124,7 +128,7 @@ onMounted(async () => {
 }
 .sk-hero {
   height: 200px;
-  border-radius: 18px;
+  border-radius: 16px;
   background: var(--surface);
   position: relative;
   overflow: hidden;
@@ -149,9 +153,10 @@ onMounted(async () => {
 .ab-hero {
   background: var(--surface);
   border: 1px solid var(--border-faint);
-  border-radius: 18px;
+  border-radius: 16px;
   padding: 24px;
   margin-bottom: 20px;
+  box-shadow: var(--shadow);
 }
 .ab-head {
   display: flex;
@@ -225,7 +230,7 @@ onMounted(async () => {
   transition: border-color 0.15s, transform 0.15s;
 }
 .learner:hover {
-  border-color: var(--accent);
+  border-color: var(--border);
   transform: translateY(-2px);
 }
 .learner-img {
@@ -254,10 +259,13 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--text);
   text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.learner-id {
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: center;
 }
 .learner-methods {
   display: flex;

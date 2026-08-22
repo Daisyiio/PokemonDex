@@ -30,14 +30,18 @@ function onError() {
     v-if="state === 'primary'"
     :src="src"
     :alt="alt"
+    class="safe-img"
     loading="lazy"
+    decoding="async"
     @error="onError"
   />
   <img
     v-else-if="state === 'fallback'"
     :src="fallback"
     :alt="alt"
+    class="safe-img"
     loading="lazy"
+    decoding="async"
     @error="onError"
   />
   <span v-else class="img-fallback" aria-hidden="true">
@@ -51,6 +55,19 @@ function onError() {
 </template>
 
 <style scoped>
+.safe-img {
+  animation: img-fade-in 0.4s ease;
+}
+@keyframes img-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
 .img-fallback {
   display: flex;
   align-items: center;

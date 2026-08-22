@@ -18,7 +18,7 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView,
-      meta: { title: '宝可梦图鉴' },
+      meta: { title: '宝可梦图鉴', subtitle: '全国图鉴' },
     },
     {
       path: '/pokemon/:id',
@@ -30,7 +30,7 @@ const router = createRouter({
       path: '/moves',
       name: 'moves',
       component: MovesView,
-      meta: { title: '招式图鉴' },
+      meta: { title: '招式图鉴', subtitle: '招式百科' },
     },
     {
       path: '/moves/:id',
@@ -42,7 +42,7 @@ const router = createRouter({
       path: '/abilities',
       name: 'abilities',
       component: AbilitiesView,
-      meta: { title: '特性图鉴' },
+      meta: { title: '特性图鉴', subtitle: '特性百科' },
     },
     {
       path: '/abilities/:id',
@@ -54,34 +54,35 @@ const router = createRouter({
       path: '/items',
       name: 'items',
       component: ItemsView,
-      meta: { title: '道具图鉴' },
+      meta: { title: '道具图鉴', subtitle: '道具百科' },
     },
     {
       path: '/type-chart',
       name: 'type-chart',
       component: TypeChartView,
-      meta: { title: '属性克制' },
+      meta: { title: '属性克制', subtitle: '克制 · 抵抗 · 无效' },
     },
     {
       path: '/egg-groups',
       name: 'egg-groups',
       component: EggGroupsView,
-      meta: { title: '蛋组图鉴' },
+      meta: { title: '蛋组图鉴', subtitle: '培育查询' },
     },
     {
       path: '/breeding',
       name: 'breeding',
       component: BreedingSimView,
-      meta: { title: '孵蛋模拟器' },
+      meta: { title: '孵蛋模拟器', subtitle: '目标驱动 · 遗传模拟' },
     },
     {
       path: '/genetics',
       name: 'genetics',
       component: GeneticsView,
-      meta: { title: '蛋招式遗传规划' },
+      meta: { title: '蛋招式遗传规划', subtitle: '自动推导遗传路径' },
     },
   ],
-  scrollBehavior(_to, _from, savedPosition) {
+  scrollBehavior(to, _from, savedPosition) {
+    if (to.name === 'home') return false
     if (savedPosition) return savedPosition
     return { top: 0 }
   },

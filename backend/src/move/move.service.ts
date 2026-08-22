@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Move, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 const FULL_WIDTH = '０１２３４５６７８９';
@@ -74,15 +74,31 @@ export class MoveService {
     if (category) where.category = category;
     const pageNum = Math.max(1, Number(page) || 1);
     const sizeNum = Math.min(200, Math.max(1, Number(pageSize) || 50));
-    const [total, items] = await this.prisma.$transaction([
-      this.prisma.move.count({ where }),
-      this.prisma.move.findMany({
-        where,
-        orderBy: { id: 'asc' },
-        skip: (pageNum - 1) * sizeNum,
-        take: sizeNum,
-      }),
-    ]);
+    const total = await this.prisma.move.count({ where });
+    let sql = `
+      SELECT * FROM "Move" WHERE 1=1
+    `;
+    const params: any[] = [];
+    if (search) {
+      sql += ' AND ("nameZh" LIKE ? OR "nameEn" LIKE ? OR "nameJa" LIKE ?)';
+      const needle = `%${search}%`;
+      params.push(needle, needle, needle);
+    }
+    if (type) {
+      sql += ' AND "type" = ?';
+      params.push(type);
+    }
+    if (category) {
+      sql += ' AND "category" = ?';
+      params.push(category);
+    }
+    sql += `
+      ORDER BY CASE WHEN "id" GLOB '[0-9]*' THEN 0 ELSE 1 END,
+               CAST(REPLACE("id", 'z-', '') AS INTEGER), "id"
+      LIMIT ? OFFSET ?
+    `;
+    params.push(sizeNum, (pageNum - 1) * sizeNum);
+    const items = (await this.prisma.$queryRawUnsafe(sql, ...params)) as Move[];
     const machines = await this.machines();
     return {
       total,

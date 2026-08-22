@@ -92,8 +92,9 @@ const pages = computed<(number | '…')[]>(() => {
   transition: all 0.15s;
 }
 .page-num:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--hover-bg);
 }
 .page-num.current {
   background: var(--accent);

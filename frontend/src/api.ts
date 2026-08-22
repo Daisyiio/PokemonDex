@@ -271,6 +271,41 @@ export function postGeneticsPlan(body: {
   return post<GeneticsPlan>(`${BASE}/genetics/plan`, body)
 }
 
+export interface DirectParentEntry {
+  id: string
+  nameZh: string
+  nameEn: string | null
+  image: string | null
+  types: string[]
+  eggGroups: string[]
+  genderRatio: { male: number; female: number }
+  sharedEggGroup: string
+  sharedMoves: string[]
+  allMovesCovered: boolean
+  learnInfos: { move: string; level: string; levelText: string; isTM: boolean; note: string; fromPrevGen?: boolean }[]
+  hasPrevGen?: boolean
+  note: string
+}
+
+export interface DirectParentsResponse {
+  target: { id: string; nameZh: string; image: string | null; types: string[]; eggGroups: string[]; genderRatio: { male: number; female: number } }
+  targetEggGroups: string[]
+  generation: number
+  requestedMoves: string[]
+  parents: DirectParentEntry[]
+  summary: { total: number; fullCover: number; partialCover: number }
+  note?: string
+}
+
+export function postGeneticsDirectParents(body: {
+  targetId: string
+  moves: string[]
+  generation: number
+  includePrevGen?: boolean
+}): Promise<DirectParentsResponse> {
+  return post<DirectParentsResponse>(`${BASE}/genetics/direct-parents`, body)
+}
+
 export interface MovesByGenResponse {
   generation: number
   learnable: { name: string; level: string; type: string; category: string; power: string; accuracy: string; pp: string }[]

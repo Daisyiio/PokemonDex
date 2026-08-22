@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { onMounted, onBeforeUnmount, onActivated, onDeactivated, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { listPokemon, listTypes } from '../api'
 import { imageUrl, typeColor } from '../types'
 import { listState } from '../store'
+import { useScrollMemory } from '../composables/useScrollMemory'
 import TypeBadge from '../components/TypeBadge.vue'
 import SafeImage from '../components/SafeImage.vue'
 import CustomSelect from '../components/CustomSelect.vue'
 import type { PokemonSummary } from '../types'
+
+useScrollMemory()
 
 const router = useRouter()
 
@@ -16,6 +19,9 @@ const items = ref<PokemonSummary[]>([])
 const total = ref(0)
 const pageSize = 24
 const loading = ref(false)
+const loadingMore = ref(false)
+const hasMore = ref(true)
+const viewMode = ref<'grid' | 'list'>('grid')
 
 // --- dropdown search ---
 const searchResults = ref<PokemonSummary[]>([])
@@ -35,8 +41,12 @@ const genOptions = [
   ...gens.map((g) => ({ value: String(g), label: `第 ${g} 世代` })),
 ]
 
-async function load() {
-  loading.value = true
+async function load(append = false) {
+  if (append) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+  }
   try {
     const res = await listPokemon({
       search: listState.search || undefined,
@@ -45,45 +55,36 @@ async function load() {
       page: listState.page,
       pageSize,
     })
-    items.value = res.items
+    items.value = append ? [...items.value, ...res.items] : res.items
     total.value = res.total
+    hasMore.value = items.value.length < res.total
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
+}
+
+function loadMore() {
+  if (loadingMore.value || !hasMore.value) return
+  listState.page++
+  load(true)
+}
+
+function onScroll() {
+  if (loadingMore.value || !hasMore.value) return
+  const bottom = document.documentElement.scrollHeight - document.documentElement.scrollTop - document.documentElement.clientHeight
+  if (bottom < 300) loadMore()
 }
 
 function applyFilters() {
   listState.page = 1
+  hasMore.value = true
   load()
 }
 
 function toggleType(t: string) {
   listState.type = listState.type === t ? '' : t
   applyFilters()
-}
-
-const totalPages = () => Math.ceil(total.value / pageSize)
-
-function goPage(p: number) {
-  if (p < 1 || p > totalPages() || p === listState.page) return
-  listState.page = p
-  load()
-}
-
-function pages(): (number | '…')[] {
-  const total = totalPages()
-  const cur = listState.page
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-  const set = new Set<number>([1, total, cur - 1, cur, cur + 1])
-  const arr = [...set].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b)
-  const out: (number | '…')[] = []
-  let prev = 0
-  for (const n of arr) {
-    if (n - prev > 1) out.push('…')
-    out.push(n)
-    prev = n
-  }
-  return out
 }
 
 function goDetail(id: string) {
@@ -203,10 +204,20 @@ onMounted(async () => {
   document.addEventListener('click', onOutsideClick)
 })
 
+onActivated(() => {
+  window.addEventListener('scroll', onScroll, { passive: true })
+  if (items.value.length === 0) load()
+})
+
+onDeactivated(() => {
+  window.removeEventListener('scroll', onScroll)
+})
+
 onBeforeUnmount(() => {
   clearTimeout(debounceTimer)
   closeDropdown()
   document.removeEventListener('click', onOutsideClick)
+  window.removeEventListener('scroll', onScroll)
 })
 </script>
 
@@ -309,7 +320,19 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div v-if="loading" class="grid">
+    <div class="toolbar">
+      <span class="toolbar-total">共 {{ total }} 只</span>
+      <div class="view-toggle">
+        <button class="vt-btn" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'" title="网格视图">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+        </button>
+        <button class="vt-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'" title="列表视图">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="3" rx="1"/><rect x="1" y="7" width="14" height="3" rx="1"/><rect x="1" y="12" width="14" height="3" rx="1"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div v-if="loading && items.length === 0" class="grid">
       <div v-for="n in 12" :key="n" class="card">
         <div class="card-img">
           <div class="skeleton sk-img" />
@@ -319,7 +342,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-else class="grid">
+    <div v-else-if="viewMode === 'grid'" class="grid">
       <router-link
         v-for="p in items"
         :key="p.id"
@@ -345,34 +368,42 @@ onBeforeUnmount(() => {
       </router-link>
     </div>
 
-    <div v-if="totalPages() > 1" class="pagination">
-      <button
-        class="page-btn"
-        :disabled="listState.page <= 1"
-        @click="goPage(listState.page - 1)"
+    <!-- 列表视图 -->
+    <div v-else class="list">
+      <router-link
+        v-for="p in items"
+        :key="p.id"
+        :to="`/pokemon/${p.id}`"
+        class="list-row"
       >
-        上一页
-      </button>
-      <template v-for="(p, i) in pages()" :key="i">
-        <span v-if="p === '…'" class="page-ellipsis">…</span>
-        <button
-          v-else
-          class="page-num"
-          :class="{ current: p === listState.page }"
-          @click="goPage(p)"
+        <div
+          class="list-img"
+          :style="{ background: `linear-gradient(160deg, ${typeColor(p.types[0] || '一般')}26, var(--surface-2))` }"
         >
-          {{ p }}
-        </button>
-      </template>
-      <button
-        class="page-btn"
-        :disabled="listState.page >= totalPages()"
-        @click="goPage(listState.page + 1)"
-      >
-        下一页
-      </button>
-      <span class="page-info">{{ listState.page }} / {{ totalPages() }}</span>
+          <SafeImage
+            v-if="p.image"
+            :src="imageUrl('official', p.image)"
+            :alt="p.nameZh"
+          />
+        </div>
+        <div class="list-info">
+          <div class="list-id">#{{ p.id }}</div>
+          <div class="list-name">{{ p.nameZh }}</div>
+          <div class="list-en" v-if="p.nameEn">{{ p.nameEn }}</div>
+        </div>
+        <div class="list-types">
+          <TypeBadge v-for="t in p.types" :key="t" :type="t" size="sm" />
+        </div>
+        <div class="list-gen" v-if="p.gen">第 {{ p.gen }} 世代</div>
+        <div class="list-arrow">›</div>
+      </router-link>
     </div>
+
+    <div v-if="loadingMore" class="scroll-loading">
+      <div class="scroll-spinner" />
+      <span>加载中...</span>
+    </div>
+    <div v-else-if="!hasMore && items.length > 0" class="scroll-end">已展示全部 {{ total }} 只</div>
   </div>
 </template>
 
@@ -405,7 +436,7 @@ onBeforeUnmount(() => {
 }
 .search-input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--text-faint);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .dropdown {
@@ -545,8 +576,8 @@ onBeforeUnmount(() => {
   transition: all 0.15s;
 }
 .chip:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--hover-bg);
+  color: var(--text);
 }
 .chip.active {
   color: #fff;
@@ -585,6 +616,114 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 14px;
 }
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.toolbar-total {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.view-toggle {
+  display: flex;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.vt-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  border: none;
+  background: var(--surface);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.vt-btn.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.vt-btn:not(.active):hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+.list-row:hover {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+.list-img {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.list-img :deep(img) {
+  max-width: 38px;
+  max-height: 38px;
+}
+.list-info {
+  min-width: 0;
+  flex: 1;
+}
+.list-id {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.list-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.list-en {
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.list-types {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.list-gen {
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.list-arrow {
+  font-size: 18px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
 .card {
   border: 1px solid var(--border-soft);
   border-radius: 14px;
@@ -598,7 +737,7 @@ onBeforeUnmount(() => {
 .card:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow-hover);
-  border-color: var(--accent);
+  border-color: var(--border);
 }
 .card-img {
   height: 110px;
@@ -675,8 +814,9 @@ onBeforeUnmount(() => {
   transition: all 0.15s;
 }
 .page-num:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--hover-bg);
 }
 .page-num.current {
   background: var(--accent);
@@ -776,5 +916,29 @@ onBeforeUnmount(() => {
   .page-info {
     display: none;
   }
+}
+.scroll-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 0;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.scroll-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.scroll-end {
+  text-align: center;
+  padding: 20px 0;
+  color: var(--text-faint);
+  font-size: 13px;
 }
 </style>

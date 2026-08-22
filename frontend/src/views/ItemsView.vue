@@ -1,22 +1,29 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onActivated, onDeactivated, ref } from 'vue'
 import { listItems, listItemCategories, type ItemListItem } from '../api'
 import { imageUrl } from '../types'
 import SafeImage from '../components/SafeImage.vue'
-import Pagination from '../components/Pagination.vue'
+import { useScrollMemory } from '../composables/useScrollMemory'
+
+useScrollMemory()
 
 const items = ref<ItemListItem[]>([])
 const categories = ref<{ id: number; nameZh: string }[]>([])
 const total = ref(0)
-const totalPages = ref(1)
 const page = ref(1)
 const loading = ref(false)
+const loadingMore = ref(false)
+const hasMore = ref(true)
 const search = ref('')
 const categoryFilter = ref('')
 let timer: number | undefined
 
-async function load() {
-  loading.value = true
+async function load(append = false) {
+  if (append) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+  }
   try {
     const res = await listItems({
       search: search.value || undefined,
@@ -24,18 +31,32 @@ async function load() {
       page: page.value,
       pageSize: 24,
     })
-    items.value = res.items
+    items.value = append ? [...items.value, ...res.items] : res.items
     total.value = res.total
-    totalPages.value = Math.max(1, Math.ceil(res.total / res.pageSize))
+    hasMore.value = items.value.length < res.total
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
+}
+
+function loadMore() {
+  if (loadingMore.value || !hasMore.value) return
+  page.value++
+  load(true)
+}
+
+function onScroll() {
+  if (loadingMore.value || !hasMore.value) return
+  const bottom = document.documentElement.scrollHeight - document.documentElement.scrollTop - document.documentElement.clientHeight
+  if (bottom < 300) loadMore()
 }
 
 function onSearch() {
   clearTimeout(timer)
   timer = window.setTimeout(() => {
     page.value = 1
+    hasMore.value = true
     load()
   }, 250)
 }
@@ -43,12 +64,22 @@ function onSearch() {
 function setCategory(c: string) {
   categoryFilter.value = c === categoryFilter.value ? '' : c
   page.value = 1
+  hasMore.value = true
   load()
 }
 
-watch(page, load)
+onActivated(() => {
+  window.addEventListener('scroll', onScroll, { passive: true })
+})
 
-onBeforeUnmount(() => clearTimeout(timer))
+onDeactivated(() => {
+  window.removeEventListener('scroll', onScroll)
+})
+
+onBeforeUnmount(() => {
+  clearTimeout(timer)
+  window.removeEventListener('scroll', onScroll)
+})
 
 listItemCategories().then((cs) => {
   categories.value = cs
@@ -98,7 +129,7 @@ load()
       </button>
     </div>
 
-    <div v-if="loading" class="grid">
+    <div v-if="loading && items.length === 0" class="grid">
       <div v-for="i in 12" :key="i" class="sk-card"></div>
     </div>
 
@@ -122,7 +153,11 @@ load()
       </div>
     </div>
 
-    <Pagination v-if="totalPages > 1" :page="page" :total-pages="totalPages" @change="page = $event" />
+    <div v-if="loadingMore" class="scroll-loading">
+      <div class="scroll-spinner" />
+      <span>加载中...</span>
+    </div>
+    <div v-else-if="!hasMore && items.length > 0" class="scroll-end">已展示全部 {{ total }} 个道具</div>
   </div>
 </template>
 
@@ -164,7 +199,8 @@ load()
   transition: border-color 0.15s;
 }
 .search-box input:focus {
-  border-color: var(--accent);
+  border-color: var(--text-faint);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .search-icon {
   position: absolute;
@@ -190,11 +226,10 @@ load()
   transition: all 0.15s;
 }
 .chip:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--hover-bg);
+  color: var(--text);
 }
 .chip.on {
-  border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-soft);
   font-weight: 600;
@@ -212,10 +247,10 @@ load()
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  transition: border-color 0.15s, transform 0.15s;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 .it-card:hover {
-  border-color: var(--accent);
+  border-color: var(--border);
   transform: translateY(-2px);
 }
 .it-icon {
@@ -283,5 +318,29 @@ load()
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
+}
+.scroll-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 0;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.scroll-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.scroll-end {
+  text-align: center;
+  padding: 20px 0;
+  color: var(--text-faint);
+  font-size: 13px;
 }
 </style>

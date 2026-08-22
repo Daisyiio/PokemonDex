@@ -7,6 +7,9 @@ import {
   resultMeta,
 } from '../typechart'
 import TypeBadge from '../components/TypeBadge.vue'
+import { useScrollMemory } from '../composables/useScrollMemory'
+
+useScrollMemory()
 
 const mode = ref<'attack' | 'defend'>('attack')
 const attacker = ref('电')
@@ -224,6 +227,8 @@ function pickDefend(t: string) {
   font-size: 24px;
   margin: 0;
   color: var(--text);
+  font-weight: 800;
+  letter-spacing: 0.5px;
 }
 .page-total {
   font-size: 13px;
@@ -249,10 +254,10 @@ function pickDefend(t: string) {
   transition: all 0.15s;
 }
 .mode-btn:hover {
-  border-color: var(--accent);
+  background: var(--hover-bg);
+  color: var(--text);
 }
 .mode-btn.on {
-  border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-soft);
 }
@@ -266,6 +271,7 @@ function pickDefend(t: string) {
   border: 1px solid var(--border-faint);
   border-radius: 16px;
   padding: 20px;
+  box-shadow: var(--shadow);
 }
 .zone-label {
   font-size: 13px;
@@ -293,10 +299,11 @@ function pickDefend(t: string) {
   transition: all 0.15s;
 }
 .chip:hover {
-  border-color: var(--accent);
+  background: var(--hover-bg);
+  color: var(--text);
 }
 .chip.on {
-  color: #fff;
+  color: var(--on-accent);
 }
 .dot {
   width: 10px;
@@ -345,39 +352,48 @@ function pickDefend(t: string) {
   opacity: 0.75;
 }
 .rc-sup {
-  background: rgba(63, 161, 41, 0.1);
-  border-color: rgba(63, 161, 41, 0.35);
-  color: #3fa129;
+  background: var(--eff-resist-bg);
+  border-color: var(--eff-resist-border);
+  color: var(--eff-resist-text);
 }
 .rc-sup-strong {
-  background: rgba(63, 161, 41, 0.18);
-  border-color: #3fa129;
-  color: #2f7d1f;
-  font-weight: 600;
+  background: var(--eff-resist-bg);
+  border-color: var(--eff-resist-border);
+  color: var(--eff-resist-text);
+  font-weight: 700;
+  border-width: 2px;
 }
 .rc-res {
-  background: rgba(41, 128, 239, 0.1);
-  border-color: rgba(41, 128, 239, 0.35);
-  color: #2980ef;
+  background: var(--eff-weak2-bg);
+  border-color: var(--eff-weak2-border);
+  color: var(--eff-weak2-text);
 }
 .rc-res-strong {
-  background: rgba(41, 128, 239, 0.18);
-  border-color: #2980ef;
-  color: #1d6ac7;
-  font-weight: 600;
+  background: var(--eff-weak2-bg);
+  border-color: var(--eff-weak2-border);
+  color: var(--eff-weak2-text);
+  font-weight: 700;
+  border-width: 2px;
 }
 .rc-imm {
-  background: rgba(120, 120, 130, 0.12);
-  border-color: rgba(120, 120, 130, 0.4);
-  color: var(--text-3);
+  background: var(--eff-immune-bg);
+  border-color: var(--eff-immune-border);
+  color: var(--eff-immune-text);
   text-decoration: line-through;
 }
 .rc-norm {
+  background: var(--eff-normal-bg);
+  border-color: var(--border-faint);
   color: var(--text-2);
 }
 
 .overall {
   margin-top: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border-faint);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: var(--shadow);
 }
 .overall-head {
   display: flex;
@@ -398,7 +414,7 @@ function pickDefend(t: string) {
   display: flex;
   flex-wrap: wrap;
   gap: 10px 16px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   font-size: 12px;
   color: var(--text-2);
 }
@@ -413,23 +429,24 @@ function pickDefend(t: string) {
   border-radius: 3px;
 }
 .lg-dot.c-4 {
-  background: rgba(63, 161, 41, 0.55);
+  background: var(--eff-resist-text);
 }
 .lg-dot.c-2 {
-  background: rgba(63, 161, 41, 0.28);
+  background: var(--eff-resist-border);
 }
 .lg-dot.c-1 {
-  background: var(--surface-2);
+  background: var(--eff-normal-bg);
   border: 1px solid var(--border);
 }
 .lg-dot.c-05 {
-  background: rgba(41, 128, 239, 0.28);
+  background: var(--eff-weak2-border);
 }
 .lg-dot.c-025 {
-  background: rgba(41, 128, 239, 0.16);
+  background: var(--eff-weak2-bg);
+  border: 1px solid var(--eff-weak2-border);
 }
 .lg-dot.c-0 {
-  background: rgba(120, 120, 130, 0.18);
+  background: var(--eff-immune-border);
 }
 .tbl-wrap {
   overflow-x: auto;
@@ -483,7 +500,7 @@ function pickDefend(t: string) {
 }
 .head-chip {
   border: none;
-  color: #fff;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 600;
   border-radius: 999px;
@@ -502,31 +519,32 @@ function pickDefend(t: string) {
   border: 1px solid var(--border);
 }
 .cell-4 {
-  background: rgba(63, 161, 41, 0.55);
-  color: #fff;
+  background: var(--eff-resist-bg);
+  color: var(--eff-resist-text);
   font-weight: 700;
+  border: 2px solid var(--eff-resist-border);
 }
 .cell-2 {
-  background: rgba(63, 161, 41, 0.28);
-  color: #2f7d1f;
+  background: var(--eff-resist-bg);
+  color: var(--eff-resist-text);
   font-weight: 600;
 }
 .cell-1 {
-  background: var(--surface-2);
+  background: var(--eff-normal-bg);
   color: var(--text-2);
 }
 .cell-5 {
-  background: rgba(41, 128, 239, 0.28);
-  color: #1d6ac7;
+  background: var(--eff-weak2-bg);
+  color: var(--eff-weak2-text);
   font-weight: 600;
 }
 .cell-25 {
-  background: rgba(41, 128, 239, 0.16);
-  color: #1d6ac7;
+  background: var(--eff-weak2-bg);
+  color: var(--eff-weak2-text);
 }
 .cell-0 {
-  background: rgba(120, 120, 130, 0.18);
-  color: var(--text-3);
+  background: var(--eff-immune-bg);
+  color: var(--eff-immune-text);
   text-decoration: line-through;
 }
 .chart-table tbody tr:hover .cell {

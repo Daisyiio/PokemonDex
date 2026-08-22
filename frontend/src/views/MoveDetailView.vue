@@ -6,6 +6,9 @@ import { imageUrl } from '../types'
 import TypeBadge from '../components/TypeBadge.vue'
 import CategoryBadge from '../components/CategoryBadge.vue'
 import SafeImage from '../components/SafeImage.vue'
+import { useScrollMemory } from '../composables/useScrollMemory'
+
+useScrollMemory()
 
 const route = useRoute()
 const router = useRouter()
@@ -103,7 +106,8 @@ onMounted(async () => {
               />
               <span v-else class="learner-unknown">?</span>
             </div>
-            <div class="learner-name">#{{ l.id }} {{ l.nameZh }}</div>
+            <div class="learner-id">#{{ l.id }}</div>
+            <div class="learner-name">{{ l.nameZh }}</div>
             <div class="learner-methods">
               <span
                 v-for="m in l.methods"
@@ -177,6 +181,7 @@ onMounted(async () => {
   border-radius: 18px;
   padding: 24px;
   margin-bottom: 20px;
+  box-shadow: var(--shadow);
 }
 .mv-head {
   display: flex;
@@ -237,8 +242,8 @@ onMounted(async () => {
   background: var(--accent-soft);
 }
 .tm-chip.tr {
-  color: #8b5cf6;
-  background: rgba(139, 92, 246, 0.12);
+  color: var(--z-move);
+  background: var(--z-move-soft);
 }
 .mv-desc {
   margin: 0;
@@ -284,7 +289,7 @@ onMounted(async () => {
   transition: border-color 0.15s, transform 0.15s;
 }
 .learner:hover {
-  border-color: var(--accent);
+  border-color: var(--border);
   transform: translateY(-2px);
 }
 .learner-img {
@@ -313,10 +318,13 @@ onMounted(async () => {
   font-weight: 600;
   color: var(--text);
   text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.learner-id {
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: center;
 }
 .learner-methods {
   display: flex;
@@ -335,11 +343,11 @@ onMounted(async () => {
   background: var(--accent-soft);
 }
 .method-机器 {
-  color: #2980ef;
-  background: rgba(41, 128, 239, 0.12);
+  color: var(--method-blue);
+  background: var(--method-blue-bg);
 }
 .method-蛋 {
-  color: #ef70ef;
-  background: rgba(239, 112, 239, 0.12);
+  color: var(--method-pink);
+  background: var(--method-pink-bg);
 }
 </style>

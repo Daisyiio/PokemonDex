@@ -161,10 +161,10 @@ onBeforeUnmount(() => {
   transition: border-color 0.15s;
 }
 .sel-btn:hover {
-  border-color: var(--accent);
+  background: var(--hover-bg);
 }
 .sel-btn.open {
-  border-color: var(--accent);
+  border-color: var(--border);
 }
 .sel-label {
   white-space: nowrap;

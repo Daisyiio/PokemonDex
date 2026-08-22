@@ -16,6 +16,9 @@ import type {
   PokedexEntry,
 } from '../types'
 import { normalizeEggGroup } from '../types'
+import { useScrollMemory } from '../composables/useScrollMemory'
+
+useScrollMemory()
 
 const route = useRoute()
 const router = useRouter()
@@ -23,6 +26,7 @@ const detail = ref<PokemonDetail | null>(null)
 const error = ref('')
 const activeForm = ref(0)
 const activeTab = ref<'moves' | 'machine' | 'egg' | 'tutor'>('moves')
+const eggOpen = ref<string | null>(null)
 const openDexGen = ref(0)
 const navList = ref<PokemonNavItem[]>([])
 const abilityMap = ref<Record<string, string>>({})
@@ -30,6 +34,18 @@ const abilityIdMap = ref<Record<string, string>>({})
 const moveGen = ref(9)
 const genMovesData = ref<MovesByGenResponse | null>(null)
 const encounters = ref<EncounterEntry[]>([])
+const genOpen = ref(false)
+const genOptions = [9, 8, 7, 6, 5, 4, 3, 2].map((v) => ({
+  value: v,
+  label: `第${v}世代`,
+}))
+function pickGen(v: number) {
+  moveGen.value = v
+  genOpen.value = false
+}
+function onGenDocClick() {
+  genOpen.value = false
+}
 
 const navIndex = computed(() =>
   navList.value.findIndex((n) => n.id === route.params.id)
@@ -104,17 +120,10 @@ async function load() {
   }
 }
 
-function goBack() {
-  if (window.history.state?.back) {
-    router.back()
-  } else {
-    router.push('/')
-  }
-}
-
 onMounted(async () => {
   load()
   navList.value = await listPokemonIds()
+  document.addEventListener('click', onGenDocClick)
 })
 
 watch(
@@ -137,9 +146,22 @@ watch(
 
 onBeforeUnmount(() => {
   document.title = '宝可梦图鉴'
+  document.removeEventListener('click', onGenDocClick)
 })
 
 const form = (): Form | undefined => detail.value?.forms[activeForm.value]
+
+function matchFormEntry<T extends { form: string; types?: string[]; data?: unknown }>(
+  list: T[],
+  currentForm: Form | undefined
+): T | undefined {
+  if (!currentForm) return list[0]
+  const byName = list.find((e) => e.form === currentForm.name)
+  if (byName) return byName
+  const curTypes = currentForm.types
+  const byTypes = list.find((e) => e.types && e.types.length === curTypes.length && e.types.every((t) => curTypes.includes(t)))
+  return byTypes || list[0]
+}
 
 const REGION_PREFIXES = ['阿罗拉', '伽勒尔', '洗翠']
 
@@ -246,7 +268,7 @@ const activeMoves = () => {
     if (tab === 'tutor') return genMovesData.value.tutor.map((m) => ({ name: m.name, level: '', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
   }
   const data = detail.value[MOVE_KEYS[activeTab.value]] as { form: string; data: MoveEntry[] }[]
-  const list = data.find((d) => d.form === form()?.name)
+  const list = matchFormEntry(data, form())
   return (list || data[0] || { data: [] }).data
 }
 
@@ -294,7 +316,7 @@ function evolutionImageFallback(node: EvolutionNode): string | undefined {
 function typeEffectData() {
   if (!detail.value) return { data: [] }
   const t = detail.value.type_effectiveness
-  return t.find((x) => x.form === form()?.name) || t[0] || { data: [] }
+  return matchFormEntry(t, form()) || t[0] || { data: [] }
 }
 
 interface EffItem {
@@ -394,10 +416,6 @@ function methodClass(method: string): string {
   <div v-if="error" class="error">{{ error }}</div>
 
   <div v-else-if="detail" class="detail">
-    <button class="back" @click="goBack">
-      <span class="back-icon">‹</span> 返回图鉴
-    </button>
-
     <div class="hero">
       <div class="hero-img" :style="{ background: heroBg() }">
         <SafeImage
@@ -553,6 +571,28 @@ function methodClass(method: string): string {
       </div>
     </section>
 
+    <section class="section">
+      <h2>种族值 <span class="hint">总和 {{ statsTotal() }}</span></h2>
+      <div v-if="stats()" class="stats-flex">
+        <div class="stats">
+          <div v-for="(value, key) in stats()" :key="key" class="stat-row">
+            <span class="stat-label">{{ statLabels[key] || key }}</span>
+            <div class="stat-track">
+              <div
+                class="stat-fill"
+                :style="{
+                  width: Math.min(100, (Number(value) / 200) * 100) + '%',
+                  background: statColors[key] || '#999',
+                }"
+              />
+            </div>
+            <span class="stat-value">{{ value }}</span>
+          </div>
+        </div>
+        <!-- <StatsRadar :labels="radarData.labels" :values="radarData.values" /> -->
+      </div>
+    </section>
+
     <section v-if="hasGallery" class="section">
       <h2>形态与异色</h2>
       <div class="gallery-grid">
@@ -573,48 +613,6 @@ function methodClass(method: string): string {
                 :alt="`${item.label} 异色`"
               />
               <span class="tag shiny">异色</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <h2>种族值 <span class="hint">总和 {{ statsTotal() }}</span></h2>
-      <div v-if="stats()" class="stats-flex">
-        <div class="stats">
-          <div v-for="(value, key) in stats()" :key="key" class="stat-row">
-            <span class="stat-label">{{ statLabels[key] || key }}</span>
-            <div class="stat-track">
-              <div
-                class="stat-fill"
-                :style="{
-                  width: Math.min(100, (Number(value) / 200) * 100) + '%',
-                  background: statColors[key] || '#999',
-                }"
-              />
-            </div>
-            <span class="stat-value">{{ value }}</span>
-          </div>
-        </div>
-        <StatsRadar :labels="radarData.labels" :values="radarData.values" />
-      </div>
-    </section>
-
-    <section class="section">
-      <h2>属性克制</h2>
-      <div class="eff-groups">
-        <div v-for="g in effGroups()" :key="g.key" class="eff-group">
-          <div class="eff-group-label" :class="`eff-${g.key}`">
-            {{ g.label }}
-          </div>
-          <div class="eff-items">
-            <div v-for="e in g.items" :key="e.type" class="eff-item" :class="`eff-${g.key}`">
-              <span class="eff-type" :style="{ background: typeColor(e.type) }">
-                <span class="picon" :class="`picon-t-${e.type}`" />
-                <span>{{ e.type }}</span>
-              </span>
-              <span class="eff-val">×{{ e.display }}</span>
             </div>
           </div>
         </div>
@@ -655,17 +653,75 @@ function methodClass(method: string): string {
     </section>
 
     <section class="section">
+      <h2>属性克制</h2>
+      <div class="eff-groups">
+        <div v-for="g in effGroups()" :key="g.key" class="eff-group">
+          <div class="eff-group-label" :class="`eff-${g.key}`">
+            {{ g.label }}
+          </div>
+          <div class="eff-items">
+            <div v-for="e in g.items" :key="e.type" class="eff-item" :class="`eff-${g.key}`">
+              <span class="eff-type" :style="{ background: typeColor(e.type) }">
+                <span class="picon" :class="`picon-t-${e.type}`" />
+                <span>{{ e.type }}</span>
+              </span>
+              <span class="eff-val">×{{ e.display }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
       <h2>可学会招式</h2>
-      <select v-model="moveGen" class="gen-select">
-        <option :value="9">第9世代</option>
-        <option :value="8">第8世代</option>
-        <option :value="7">第7世代</option>
-        <option :value="6">第6世代</option>
-        <option :value="5">第5世代</option>
-        <option :value="4">第4世代</option>
-        <option :value="3">第3世代</option>
-        <option :value="2">第2世代</option>
-      </select>
+      <div class="gen-wrap">
+        <button type="button" class="gen-select" @click.stop="genOpen = !genOpen">
+          <span>第{{ moveGen }}世代</span>
+          <svg
+            class="gen-chevron"
+            :class="{ open: genOpen }"
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+        <Transition name="genDrop">
+          <div v-if="genOpen" class="gen-panel">
+            <button
+              v-for="g in genOptions"
+              :key="g.value"
+              type="button"
+              class="gen-opt"
+              :class="{ on: moveGen === g.value }"
+              @click="pickGen(g.value)"
+            >
+              <span>{{ g.label }}</span>
+              <svg
+                v-if="moveGen === g.value"
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </button>
+          </div>
+        </Transition>
+      </div>
       <div class="seg tabs">
         <button :class="{ active: activeTab === 'moves' }" @click="activeTab = 'moves'">
           升级学习
@@ -686,6 +742,7 @@ function methodClass(method: string): string {
             <tr>
               <th v-if="activeTab === 'machine'">学习器</th>
               <th v-else-if="activeTab === 'tutor'">—</th>
+              <th v-else-if="activeTab === 'egg'">来源</th>
               <th v-else>等级</th>
               <th>名称</th>
               <th>属性</th>
@@ -698,7 +755,22 @@ function methodClass(method: string): string {
           <tbody>
             <template v-for="m in activeMoves()" :key="m.name + m.level + m.machine">
               <tr>
-                <td class="num">{{ activeTab === 'tutor' ? '—' : (m.machine || m.level || '—') }}</td>
+                <td class="num">
+                  <template v-if="activeTab === 'egg' && m.parents && m.parents.length">
+                    <button
+                      class="egg-toggle"
+                      :class="{ open: eggOpen === m.name }"
+                      :title="eggOpen === m.name ? '收起遗传来源' : '查看遗传来源'"
+                      @click="eggOpen = eggOpen === m.name ? null : m.name"
+                    >
+                      <span class="egg-toggle-count">来源 {{ m.parents.length }}</span>
+                      <svg class="egg-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+                  </template>
+                  <template v-else>{{ activeTab === 'tutor' ? '—' : (m.machine || m.level || '—') }}</template>
+                </td>
                 <td class="move-name">{{ m.name }}</td>
                 <td>
                   <span class="type-badge" :style="{ background: typeColor(m.type) }">
@@ -713,9 +785,17 @@ function methodClass(method: string): string {
                 <td class="num">{{ m.accuracy }}</td>
                 <td class="num">{{ m.pp }}</td>
               </tr>
-              <tr v-if="activeTab === 'egg' && m.parents && m.parents.length" class="egg-parent-row">
+              <tr
+                v-if="activeTab === 'egg' && m.parents && m.parents.length && eggOpen === m.name"
+                class="egg-parent-row"
+              >
                 <td colspan="7" class="egg-parents">
-                  遗传来源：{{ m.parents.map((p) => p.name).join('、') }}
+                  <span class="ep-label">遗传来源</span>
+                  <span class="ep-chips">
+                    <router-link v-for="p in m.parents" :key="p.id ?? p.name" :to="`/pokemon/${p.id}`" class="ep-chip">
+                      {{ p.name }}
+                    </router-link>
+                  </span>
                 </td>
               </tr>
             </template>
@@ -836,29 +916,6 @@ function methodClass(method: string): string {
   text-align: center;
   color: var(--text-3);
   padding: 60px 0;
-}
-
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: none;
-  background: none;
-  color: var(--text-2);
-  font-size: 14px;
-  cursor: pointer;
-  padding: 6px 10px;
-  margin-bottom: 16px;
-  border-radius: 8px;
-  transition: background 0.15s, color 0.15s;
-}
-.back:hover {
-  background: var(--surface-3);
-  color: var(--text);
-}
-.back-icon {
-  font-size: 18px;
-  line-height: 1;
 }
 
 .hero {
@@ -1053,12 +1110,12 @@ function methodClass(method: string): string {
   transition: all 0.15s;
 }
 .seg button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--hover-bg);
+  color: var(--text);
 }
 .seg button.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -1220,10 +1277,10 @@ function methodClass(method: string): string {
   white-space: nowrap;
 }
 .gender-label.g-f {
-  color: #e05a7a;
+  color: var(--gender-f);
 }
 .gender-label.g-m {
-  color: #4f86e0;
+  color: var(--gender-m);
 }
 .gender-bar {
   display: flex;
@@ -1234,11 +1291,11 @@ function methodClass(method: string): string {
   min-width: 60px;
 }
 .gender-f {
-  background: #e05a7a;
+  background: var(--gender-f);
   transition: width 0.3s;
 }
 .gender-m {
-  background: #4f86e0;
+  background: var(--gender-m);
   transition: width 0.3s;
 }
 .gender-none {
@@ -1263,7 +1320,7 @@ function methodClass(method: string): string {
 }
 .egg-link:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .shape-value {
   display: flex;
@@ -1378,26 +1435,26 @@ function methodClass(method: string): string {
   font-weight: 700;
   margin-bottom: 8px;
   padding-left: 10px;
-  border-left: 4px solid #ccc;
+  border-left: 4px solid var(--border);
 }
 .eff-group-label.eff-weak4 {
-  border-color: #e74c3c;
+  border-color: var(--eff-weak4-text);
   color: var(--eff-weak4-text);
 }
 .eff-group-label.eff-weak2 {
-  border-color: #e67e22;
+  border-color: var(--eff-weak2-text);
   color: var(--eff-weak2-text);
 }
 .eff-group-label.eff-resist {
-  border-color: #27ae60;
+  border-color: var(--eff-resist-text);
   color: var(--eff-resist-text);
 }
 .eff-group-label.eff-immune {
-  border-color: #7f8c8d;
+  border-color: var(--eff-immune-text);
   color: var(--eff-immune-text);
 }
 .eff-group-label.eff-normal {
-  border-color: #bbb;
+  border-color: var(--border);
   color: var(--text-3);
 }
 .eff-items {
@@ -1438,7 +1495,7 @@ function methodClass(method: string): string {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #fff;
+  color: var(--on-accent);
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 14px;
@@ -1523,21 +1580,91 @@ function methodClass(method: string): string {
 .tabs {
   margin: 0 0 14px;
 }
-.gen-select {
+.gen-wrap {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
   margin-bottom: 14px;
-  padding: 4px 10px;
-  border-radius: 8px;
+}
+.gen-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-2);
   font-size: 13px;
   outline: none;
-  float: right;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
   cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
-.gen-select:hover { border-color: var(--accent); }
-.gen-select:focus { border-color: var(--accent); }
+.gen-select:hover,
+.gen-select:focus-visible {
+  border-color: var(--border);
+  color: var(--text);
+}
+.gen-select:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.gen-chevron {
+  transition: transform 0.18s ease;
+  color: var(--text-faint);
+}
+.gen-select:hover .gen-chevron,
+.gen-chevron.open {
+  color: var(--accent);
+}
+.gen-chevron.open {
+  transform: rotate(180deg);
+}
+.gen-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 150px;
+  padding: 4px;
+  background: var(--drop-bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  box-shadow: var(--shadow-hover);
+  z-index: 15;
+  transform-origin: top right;
+}
+.gen-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.gen-opt:hover {
+  background: var(--drop-hover);
+  color: var(--text);
+}
+.gen-opt.on {
+  color: var(--accent);
+  font-weight: 600;
+}
+.genDrop-enter-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.genDrop-leave-active {
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.genDrop-enter-from,
+.genDrop-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.97);
+}
 
 .table-wrap {
   overflow: auto;
@@ -1579,25 +1706,86 @@ function methodClass(method: string): string {
 .move-name {
   font-weight: 600;
 }
-.egg-parent-row {
-  background: none !important;
+.moves-table .egg-parent-row {
+  background: none;
 }
-.egg-parents {
+.moves-table .egg-parent-row:hover {
+  background: none;
+}
+.egg-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-2);
+  color: var(--text-2);
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.egg-toggle:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+.egg-toggle.open {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.egg-chevron {
+  transition: transform 0.18s;
+}
+.egg-toggle.open .egg-chevron {
+  transform: rotate(180deg);
+}
+.moves-table .egg-parents {
   font-size: 12px;
   color: var(--text-faint);
-  padding: 2px 8px 6px !important;
-  border-top: none !important;
+  padding: 2px 8px 8px;
+  border-top: none;
+  white-space: normal;
+  line-height: 1.9;
 }
-.empty {
+.ep-label {
+  margin-right: 8px;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.ep-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  vertical-align: middle;
+}
+.ep-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-2);
+  text-decoration: none;
+  transition: all 0.15s;
+}
+.ep-chip:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+.moves-table .empty {
   text-align: center;
   color: var(--text-3);
-  padding: 24px !important;
+  padding: 24px;
 }
 .type-badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #fff;
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 500;
   padding: 3px 10px 3px 4px;
@@ -1655,24 +1843,24 @@ function methodClass(method: string): string {
   font-weight: 600;
 }
 .method-tag.wild {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: var(--method-green-bg);
+  color: var(--method-green);
 }
 .method-tag.trade {
-  background: #e3f2fd;
-  color: #1565c0;
+  background: var(--method-blue-bg);
+  color: var(--method-blue);
 }
 .method-tag.raid {
-  background: #fce4ec;
-  color: #c62828;
+  background: var(--method-pink-bg);
+  color: var(--method-pink);
 }
 .method-tag.radar {
-  background: #fff3e0;
-  color: #e65100;
+  background: var(--method-orange-bg);
+  color: var(--method-orange);
 }
 .method-tag.overworld {
-  background: #f3e5f5;
-  color: #6a1b9a;
+  background: var(--method-purple-bg);
+  color: var(--method-purple);
 }
 
 .nav-buttons {
@@ -1698,7 +1886,7 @@ function methodClass(method: string): string {
   text-align: right;
 }
 .nav-btn:hover:not(.disabled) {
-  border-color: var(--accent);
+  border-color: var(--border);
   box-shadow: var(--shadow-hover);
 }
 .nav-btn:active:not(.disabled) {
@@ -1921,7 +2109,7 @@ function methodClass(method: string): string {
   }
   .moves-table td.empty {
     grid-column: 1 / -1;
-    padding: 16px !important;
+    padding: 16px;
     text-align: center;
   }
   .moves-table td.empty::before {

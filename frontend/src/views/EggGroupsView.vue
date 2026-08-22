@@ -4,6 +4,9 @@ import { useRoute } from 'vue-router'
 import { listEggGroups, type EggGroup } from '../api'
 import { imageUrl, typeColor } from '../types'
 import SafeImage from '../components/SafeImage.vue'
+import { useScrollMemory } from '../composables/useScrollMemory'
+
+useScrollMemory()
 
 const route = useRoute()
 const groups = ref<EggGroup[]>([])
@@ -140,7 +143,8 @@ onMounted(async () => {
   transition: border-color 0.15s;
 }
 .eg-group.open {
-  border-color: var(--accent);
+  border-color: var(--border);
+  box-shadow: var(--shadow-hover);
 }
 .eg-head {
   width: 100%;
@@ -190,14 +194,14 @@ onMounted(async () => {
   color: inherit;
   background: var(--surface-2);
   border: 1px solid var(--border-faint);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 10px;
   text-align: center;
   transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .mem:hover {
   transform: translateY(-2px);
-  border-color: var(--accent);
+  border-color: var(--border);
   box-shadow: var(--shadow-hover);
 }
 .mem-img {
@@ -205,11 +209,15 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 .mem-img img {
   max-width: 64px;
   max-height: 64px;
+  transition: transform 0.18s;
+}
+.mem:hover .mem-img img {
+  transform: scale(1.08);
 }
 .mem-id {
   margin-top: 6px;
@@ -227,7 +235,14 @@ onMounted(async () => {
 .eg-enter-active {
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
+.eg-leave-active {
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
 .eg-enter-from {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.eg-leave-to {
   opacity: 0;
   transform: translateY(-4px);
 }
