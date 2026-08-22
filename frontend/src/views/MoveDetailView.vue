@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getMove, type MoveDetail } from '../api'
 import { imageUrl } from '../types'
@@ -27,7 +27,9 @@ const methodLabel: Record<string, string> = {
   蛋: '蛋孵化',
 }
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
+  error.value = ''
   try {
     move.value = await getMove(route.params.id as string)
     if (!move.value?.nameZh) error.value = '未找到该招式'
@@ -36,7 +38,11 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+watch(() => route.params.id, load)
+
+onMounted(load)
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getAbility, type AbilityDetail } from '../api'
 import { imageUrl } from '../types'
@@ -24,7 +24,9 @@ const methodLabel: Record<string, string> = {
   隐藏: '隐藏特性',
 }
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
+  error.value = ''
   try {
     ability.value = await getAbility(route.params.id as string)
     if (!ability.value?.nameZh) error.value = '未找到该特性'
@@ -33,7 +35,11 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+watch(() => route.params.id, load)
+
+onMounted(load)
 </script>
 
 <template>
