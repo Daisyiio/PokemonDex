@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
 import { listMoves, type MoveListItem } from '../api'
-import { CATEGORY_COLORS, TYPE_COLORS, typeColor } from '../types'
+import { CATEGORY_COLORS, TYPE_COLORS } from '../types'
 import TypeBadge from '../components/TypeBadge.vue'
 import CategoryBadge from '../components/CategoryBadge.vue'
 import { useScrollMemory } from '../composables/useScrollMemory'

@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 
 const props = defineProps<{
-  src: string
+  src: string | null | undefined
   fallback?: string
   alt?: string
 }>()
@@ -27,7 +27,7 @@ function onError() {
 
 <template>
   <img
-    v-if="state === 'primary'"
+    v-if="state === 'primary' && src"
     :src="src"
     :alt="alt"
     class="safe-img"
@@ -36,7 +36,7 @@ function onError() {
     @error="onError"
   />
   <img
-    v-else-if="state === 'fallback'"
+    v-else-if="state === 'fallback' && fallback"
     :src="fallback"
     :alt="alt"
     class="safe-img"

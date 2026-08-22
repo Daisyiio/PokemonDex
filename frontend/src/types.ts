@@ -33,7 +33,7 @@ export interface MoveEntry {
   power: string
   accuracy: string
   pp: string
-  parents?: { id: string; name: string }[]
+  parents?: { id: string | null; name: string }[]
 }
 
 export interface Form {
@@ -144,8 +144,8 @@ export function categoryColor(category: string): string {
   return CATEGORY_COLORS[category] || '#999'
 }
 
-export function imageUrl(subdir: string, name: string): string {
-  return `/images/${subdir}/${encodeURIComponent(name)}`
+export function imageUrl(subdir: string, name: string | null | undefined): string {
+  return `/images/${subdir}/${encodeURIComponent(name ?? '')}`
 }
 
 export function normalizeEggGroup(raw: string): string {

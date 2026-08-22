@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { useRoute, RouterLink } from 'vue-router'
 import { getPokemon, listPokemonIds, listAbilities, getMovesByGen, getPokemonEncounters, type PokemonNavItem, type MovesByGenResponse, type EncounterEntry } from '../api'
 import { imageUrl, typeColor } from '../types'
 import TypeBadge from '../components/TypeBadge.vue'
@@ -20,7 +20,6 @@ import { useScrollMemory } from '../composables/useScrollMemory'
 useScrollMemory()
 
 const route = useRoute()
-const router = useRouter()
 const detail = ref<PokemonDetail | null>(null)
 const error = ref('')
 const activeForm = ref(0)
@@ -244,10 +243,10 @@ const MOVE_KEYS = {
   egg: 'egg_moves',
 } as const
 
-const activeMoves = () => {
+const activeMoves = (): MoveEntry[] => {
   if (!detail.value) return []
   if (activeTab.value === 'tutor' && moveGen.value === 9) return []
-  if (activeTab.value === 'tutor') return genMovesData.value?.tutor?.map((m) => ({ name: m.name, level: '', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' })) || []
+  if (activeTab.value === 'tutor') return (genMovesData.value?.tutor?.map((m) => ({ name: m.name, level: '', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' })) || []) as MoveEntry[]
   if (moveGen.value !== 9 && genMovesData.value) {
     const tab = activeTab.value
     if (tab === 'moves') return genMovesData.value.learnable.map((m) => ({ name: m.name, level: m.level || '—', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' }))
