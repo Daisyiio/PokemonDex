@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getMove, type MoveDetail } from '../api'
+import { getMove, type MoveDetail, type MoveLearner } from '../api'
 import { imageUrl } from '../types'
 import TypeBadge from '../components/TypeBadge.vue'
 import CategoryBadge from '../components/CategoryBadge.vue'
@@ -16,6 +16,8 @@ const move = ref<MoveDetail | null>(null)
 const loading = ref(true)
 const error = ref('')
 
+const GENS = [2, 3, 4, 5, 6, 7, 8, 9]
+
 function goBack() {
   if (window.history.length > 1) router.back()
   else router.push('/moves')
@@ -25,7 +27,57 @@ const methodLabel: Record<string, string> = {
   升级: '升级',
   机器: '招式机',
   蛋: '蛋孵化',
+  教授: '教授',
 }
+
+// 每只宝可梦的世代学习数据
+interface GenRow {
+  id: string
+  nameZh: string
+  image: string | null
+  levels: Record<number, string> // gen -> level text
+}
+
+const levelUpRows = computed(() => {
+  if (!move.value) return []
+  const learners = move.value.learners.filter((l) => l.methods.some((m) => m.method === '升级'))
+  return learners.map((l) => {
+    const levels: Record<number, string> = {}
+    for (const g of GENS) {
+      const entries = l.methods.filter((m) => m.method === '升级' && m.gen === g)
+      if (entries.length === 0) {
+        levels[g] = '—'
+      } else {
+        const lvs = entries.map((e) => e.level).filter(Boolean)
+        if (lvs.length === 0) {
+          levels[g] = '✓'
+        } else {
+          const nums = lvs.map(Number).filter((n) => !isNaN(n))
+          if (nums.length > 0) {
+            const min = Math.min(...nums)
+            const max = Math.max(...nums)
+            levels[g] = min === max ? `Lv.${min}` : `Lv.${min}-${max}`
+          } else {
+            levels[g] = lvs[0] === '—' ? '初始' : '✓'
+          }
+        }
+      }
+    }
+    return { id: l.id, nameZh: l.nameZh, image: l.image, levels } as GenRow
+  })
+})
+const eggLearners = computed(() => {
+  if (!move.value) return []
+  return move.value.learners.filter((l) => l.methods.some((m) => m.method === '蛋'))
+})
+const machineLearners = computed(() => {
+  if (!move.value) return []
+  return move.value.learners.filter((l) => l.methods.some((m) => m.method === '机器'))
+})
+const tutorLearners = computed(() => {
+  if (!move.value) return []
+  return move.value.learners.filter((l) => l.methods.some((m) => m.method === '教授'))
+})
 
 async function load() {
   loading.value = true
@@ -92,14 +144,73 @@ onMounted(load)
         <p class="mv-desc" v-if="move.description">{{ move.description }}</p>
       </section>
 
-      <section class="learners">
-        <h2>可学习宝可梦 <span class="count">{{ move.learners.length }} 只</span></h2>
-        <div v-if="move.learners.length === 0" class="no-learners">
-          没有宝可梦能通过正常方式学会此招式
+      <!-- 额外数据：标志、Z招式、效果等 -->
+      <div v-if="move.extra" class="extra-section">
+        <div v-if="move.extra.flags && move.extra.flags.length" class="flag-list">
+          <span v-for="f in move.extra.flags" :key="f" class="flag-tag">{{ f }}</span>
         </div>
-        <div v-else class="learner-grid">
+
+        <div v-if="move.extra.z" class="extra-row">
+          <span class="extra-label">Ｚ招式</span>
+          <span class="extra-val">{{ move.extra.z.move || '—' }}</span>
+          <span v-if="move.extra.z.crystal" class="extra-sub">{{ move.extra.z.crystal }}</span>
+          <span v-if="move.extra.z.power" class="extra-sub">威力 {{ move.extra.z.power }}</span>
+        </div>
+
+        <div v-if="move.extra.max" class="extra-row">
+          <span class="extra-label">极巨招式</span>
+          <span class="extra-val">{{ move.extra.max.move || '—' }}</span>
+          <span v-if="move.extra.max.power" class="extra-sub">威力 {{ move.extra.max.power }}</span>
+        </div>
+
+        <div v-if="move.extra.contest && move.extra.contest.length" class="extra-row">
+          <span class="extra-label">华丽大赛</span>
+          <span class="extra-val">{{ move.extra.contest[0].type || '—' }}</span>
+          <span v-if="move.extra.contest[0].appeal" class="extra-sub">表演 {{ move.extra.contest[0].appeal }}</span>
+          <span v-if="move.extra.contest[0].jam" class="extra-sub">妨害 {{ move.extra.contest[0].jam }}</span>
+          <span v-if="move.extra.contest[0].gen" class="extra-sub">第{{ move.extra.contest[0].gen }}世代</span>
+        </div>
+
+        <div v-if="move.extra.effect" class="extra-effect">
+          <h3>招式附加效果</h3>
+          <p>{{ move.extra.effect }}</p>
+        </div>
+      </div>
+
+<section class="learners">
+        <h2>升级学习 <span class="count">{{ levelUpRows.length }} 只</span></h2>
+        <div v-if="levelUpRows.length === 0" class="no-learners">
+          没有宝可梦能通过升级学会此招式
+        </div>
+        <div v-else class="gen-table-wrap">
+          <table class="gen-table">
+            <thead>
+              <tr>
+                <th>宝可梦</th>
+                <th v-for="g in GENS" :key="g" class="gen-th">第{{ g }}世代</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in levelUpRows" :key="row.id">
+                <td class="td-mon">
+                  <router-link :to="`/pokemon/${row.id}`" class="td-link">
+                    <SafeImage v-if="row.image" :src="imageUrl('official', row.image)" :alt="row.nameZh" class="td-img" />
+                    <span class="td-name">{{ row.nameZh }}</span>
+                    <span class="td-id">#{{ row.id }}</span>
+                  </router-link>
+                </td>
+                <td v-for="g in GENS" :key="g" class="td-lv" :class="{ dim: row.levels[g] === '—' }">{{ row.levels[g] }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="learners" v-if="eggLearners.length">
+        <h2>蛋招式 <span class="count">{{ eggLearners.length }} 只</span></h2>
+        <div class="learner-grid">
           <router-link
-            v-for="l in move.learners"
+            v-for="l in eggLearners"
             :key="l.id"
             :to="`/pokemon/${l.id}`"
             class="learner"
@@ -114,16 +225,55 @@ onMounted(load)
             </div>
             <div class="learner-id">#{{ l.id }}</div>
             <div class="learner-name">{{ l.nameZh }}</div>
-            <div class="learner-methods">
-              <span
-                v-for="m in l.methods"
-                :key="m"
-                class="method"
-                :class="`method-${m}`"
-              >
-                {{ methodLabel[m] }}
-              </span>
+            <div class="learner-lv egg">蛋</div>
+          </router-link>
+        </div>
+      </section>
+
+      <section class="learners" v-if="machineLearners.length">
+        <h2>招式学习器 <span class="count">{{ machineLearners.length }} 只</span></h2>
+        <div class="learner-grid">
+          <router-link
+            v-for="l in machineLearners"
+            :key="l.id"
+            :to="`/pokemon/${l.id}`"
+            class="learner"
+          >
+            <div class="learner-img">
+              <SafeImage
+                v-if="l.image"
+                :src="imageUrl('official', l.image)"
+                :alt="l.nameZh"
+              />
+              <span v-else class="learner-unknown">?</span>
             </div>
+            <div class="learner-id">#{{ l.id }}</div>
+            <div class="learner-name">{{ l.nameZh }}</div>
+            <div class="learner-lv tm">TM</div>
+          </router-link>
+        </div>
+      </section>
+
+      <section class="learners" v-if="tutorLearners.length">
+        <h2>教授招式 <span class="count">{{ tutorLearners.length }} 只</span></h2>
+        <div class="learner-grid">
+          <router-link
+            v-for="l in tutorLearners"
+            :key="l.id"
+            :to="`/pokemon/${l.id}`"
+            class="learner"
+          >
+            <div class="learner-img">
+              <SafeImage
+                v-if="l.image"
+                :src="imageUrl('official', l.image)"
+                :alt="l.nameZh"
+              />
+              <span v-else class="learner-unknown">?</span>
+            </div>
+            <div class="learner-id">#{{ l.id }}</div>
+            <div class="learner-name">{{ l.nameZh }}</div>
+            <div class="learner-lv tutor">教授</div>
           </router-link>
         </div>
       </section>
@@ -257,6 +407,70 @@ onMounted(load)
   line-height: 1.8;
   color: var(--text-2);
 }
+.extra-section {
+  background: var(--surface);
+  border: 1px solid var(--border-faint);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+.flag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.flag-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+.extra-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.extra-label {
+  font-weight: 700;
+  color: var(--text-3);
+  min-width: 72px;
+}
+.extra-val {
+  font-weight: 600;
+  color: var(--text);
+}
+.extra-sub {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.extra-sub::before {
+  content: '·';
+  margin-right: 4px;
+}
+.extra-effect {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-faint);
+}
+.extra-effect h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text);
+}
+.extra-effect p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-2);
+  white-space: pre-line;
+}
 .learners h2 {
   margin: 0 0 16px;
   font-size: 18px;
@@ -275,6 +489,90 @@ onMounted(load)
   background: var(--surface);
   border: 1px dashed var(--border);
   border-radius: 14px;
+}
+.gen-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-faint);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.gen-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 640px;
+}
+.gen-table th {
+  text-align: center;
+  padding: 8px 6px;
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-faint);
+  white-space: nowrap;
+}
+.gen-table th:first-child {
+  text-align: left;
+  padding-left: 12px;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface-2);
+}
+.gen-table td {
+  text-align: center;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border-faint);
+  vertical-align: middle;
+}
+.gen-table tr:last-child td {
+  border-bottom: none;
+}
+.gen-table tr:hover td {
+  background: var(--hover-bg);
+}
+.td-mon {
+  text-align: left;
+  padding-left: 12px;
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.gen-table tr:hover .td-mon {
+  background: var(--hover-bg);
+}
+.td-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+.td-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: var(--surface-2);
+}
+.td-name {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.td-id {
+  color: var(--text-faint);
+  font-size: 11px;
+  margin-left: -2px;
+}
+.td-lv {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.td-lv.dim {
+  color: var(--text-faint);
 }
 .learner-grid {
   display: grid;
@@ -331,6 +629,32 @@ onMounted(load)
   font-size: 11px;
   color: var(--text-3);
   text-align: center;
+}
+.learner-lvs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  margin-top: 4px;
+}
+.learner-lv {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text-2);
+  background: var(--surface-3);
+  white-space: nowrap;
+  line-height: 1.3;
+}
+.learner-lv.egg {
+  background: var(--method-pink);
+}
+.learner-lv.tm {
+  background: var(--method-blue);
+}
+.learner-lv.tutor {
+  background: var(--method-purple);
 }
 .learner-methods {
   display: flex;

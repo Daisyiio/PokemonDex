@@ -21,13 +21,11 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 </script>
 
 <template>
-  <Transition name="to-top">
-    <button v-if="visible" class="to-top" @click="scrollTop" aria-label="返回顶部">
+  <button v-if="visible" class="to-top" @click="scrollTop" aria-label="返回顶部">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 19V5M5 12l7-7 7 7" />
       </svg>
     </button>
-  </Transition>
 </template>
 
 <style scoped>
@@ -58,15 +56,6 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 }
 .to-top:active {
   transform: scale(0.94);
-}
-.to-top-enter-active,
-.to-top-leave-active {
-  transition: opacity 0.18s, transform 0.18s;
-}
-.to-top-enter-from,
-.to-top-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
 }
 @media (max-width: 768px) {
   .to-top {

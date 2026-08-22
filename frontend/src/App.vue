@@ -131,7 +131,7 @@ onMounted(initTheme)
 
   <main class="app-main">
     <RouterView v-slot="{ Component, route }">
-      <Transition name="page" mode="out-in" appear>
+      <Transition name="page" appear>
         <KeepAlive :max="12">
           <component :is="Component" :key="route.name" />
         </KeepAlive>

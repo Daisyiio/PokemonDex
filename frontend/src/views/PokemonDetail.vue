@@ -400,7 +400,7 @@ function methodClass(method: string): string {
 </script>
 
 <template>
-  <div v-if="error" class="error">{{ error }}</div>
+  <div v-if="error && !detail" class="error">{{ error }}</div>
 
   <div v-else-if="detail" class="detail">
     <div class="hero">

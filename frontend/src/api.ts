@@ -178,12 +178,20 @@ export interface MoveLearner {
   id: string
   nameZh: string
   image: string | null
-  methods: string[]
+  methods: { method: string; level?: string; gen?: number }[]
 }
 
 export interface MoveDetail extends MoveListItem {
   machines: string[]
   learners: MoveLearner[]
+  extra?: {
+    flags?: string[]
+    z?: { crystal?: string; move?: string; power?: string }
+    max?: { move?: string; power?: string }
+    contest?: { type?: string; appeal?: string; jam?: string }
+    effect?: string
+    descriptions?: Record<string, string>
+  }
 }
 
 export function getMove(id: string): Promise<MoveDetail> {
