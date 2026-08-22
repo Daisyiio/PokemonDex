@@ -7,7 +7,6 @@ import TypeBadge from '../components/TypeBadge.vue'
 import CategoryBadge from '../components/CategoryBadge.vue'
 import SafeImage from '../components/SafeImage.vue'
 import ShapeIcon from '../components/ShapeIcon.vue'
-import StatsRadar from '../components/StatsRadar.vue'
 import type {
   PokemonDetail,
   Form,
@@ -104,7 +103,6 @@ async function loadAbilities(names: string[]) {
 
 async function load() {
   error.value = ''
-  detail.value = null
   moveGen.value = 9
   genMovesData.value = null
   encounters.value = []
@@ -233,16 +231,6 @@ const galleryItems = computed(() => {
 const hasGallery = computed(() => galleryItems.value.length > 0)
 
 const stats = () => detail.value?.stats[activeForm.value]?.data
-
-const radarData = computed(() => {
-  const s = stats()
-  const order = ['hp', 'attack', 'defense', 'speed', 'sp_defense', 'sp_attack']
-  if (!s) return { labels: [], values: [] }
-  return {
-    labels: order.map((k) => statLabels[k] || k),
-    values: order.map((k) => Number(s[k]) || 0),
-  }
-})
 
 const statsTotal = () => {
   const d = stats()
@@ -589,7 +577,6 @@ function methodClass(method: string): string {
             <span class="stat-value">{{ value }}</span>
           </div>
         </div>
-        <!-- <StatsRadar :labels="radarData.labels" :values="radarData.values" /> -->
       </div>
     </section>
 

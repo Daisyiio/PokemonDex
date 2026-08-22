@@ -16,7 +16,6 @@ export interface SpeciesInfo {
   lineIds: string[];
 }
 
-const DITTO_ID = '0132';
 const MAX_DEPTH = 3;
 
 @Injectable()

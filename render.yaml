@@ -1,0 +1,21 @@
+[render]
+  # 后端服务配置
+  [render.service]
+  name = "pokemon-dex"
+  # Node 版本
+  nodeVersion = "20"
+  # 构建命令：安装依赖 + 构建后端 + 构建前端
+  buildCommand = "cd backend && npm ci && npx prisma generate && npm run build && cd ../frontend && npm ci && npm run build"
+  # 启动命令
+  startCommand = "cd backend && node dist/main.js"
+  # 环境变量
+  envVars = [
+    { key = "NODE_ENV", value = "production" },
+    { key = "PORT", value = "3000" },
+    { key = "DATABASE_URL", value = "file:./prisma/dev.db" }
+  ]
+  # 持久磁盘（存 SQLite + 图片）
+  [render.service.disk]
+  name = "pokemon-data"
+  mountPath = "/opt/data"
+  sizeGB = 1

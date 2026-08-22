@@ -1,10 +1,11 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onMounted, onBeforeUnmount, onActivated, onDeactivated, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { listPokemon, listTypes } from '../api'
 import { imageUrl, typeColor } from '../types'
 import { listState } from '../store'
 import { useScrollMemory } from '../composables/useScrollMemory'
+import { useInfiniteScroll } from '../composables/useInfiniteScroll'
 import TypeBadge from '../components/TypeBadge.vue'
 import SafeImage from '../components/SafeImage.vue'
 import CustomSelect from '../components/CustomSelect.vue'
@@ -19,7 +20,6 @@ const items = ref<PokemonSummary[]>([])
 const total = ref(0)
 const pageSize = 24
 const loading = ref(false)
-const loadingMore = ref(false)
 const hasMore = ref(true)
 const viewMode = ref<'grid' | 'list'>('grid')
 
@@ -42,11 +42,7 @@ const genOptions = [
 ]
 
 async function load(append = false) {
-  if (append) {
-    loadingMore.value = true
-  } else {
-    loading.value = true
-  }
+  if (!append) loading.value = true
   try {
     const res = await listPokemon({
       search: listState.search || undefined,
@@ -60,21 +56,13 @@ async function load(append = false) {
     hasMore.value = items.value.length < res.total
   } finally {
     loading.value = false
-    loadingMore.value = false
   }
 }
 
-function loadMore() {
-  if (loadingMore.value || !hasMore.value) return
-  listState.page++
-  load(true)
-}
-
-function onScroll() {
-  if (loadingMore.value || !hasMore.value) return
-  const bottom = document.documentElement.scrollHeight - document.documentElement.scrollTop - document.documentElement.clientHeight
-  if (bottom < 300) loadMore()
-}
+const { loadingMore, onScroll } = useInfiniteScroll(
+  async () => { listState.page++; await load(true) },
+  () => hasMore.value,
+)
 
 function applyFilters() {
   listState.page = 1

@@ -1,7 +1,8 @@
-<script setup lang="ts">
-import { onBeforeUnmount, onActivated, onDeactivated, ref } from 'vue'
+﻿<script setup lang="ts">
+import { onBeforeUnmount, ref } from 'vue'
 import { listAbilities, type AbilityInfo } from '../api'
 import { useScrollMemory } from '../composables/useScrollMemory'
+import { useInfiniteScroll } from '../composables/useInfiniteScroll'
 
 useScrollMemory()
 
@@ -9,17 +10,12 @@ const items = ref<AbilityInfo[]>([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
-const loadingMore = ref(false)
 const hasMore = ref(true)
 const search = ref('')
 let timer: number | undefined
 
 async function load(append = false) {
-  if (append) {
-    loadingMore.value = true
-  } else {
-    loading.value = true
-  }
+  if (!append) loading.value = true
   try {
     const res = await listAbilities({
       search: search.value || undefined,
@@ -31,21 +27,13 @@ async function load(append = false) {
     hasMore.value = items.value.length < res.total
   } finally {
     loading.value = false
-    loadingMore.value = false
   }
 }
 
-function loadMore() {
-  if (loadingMore.value || !hasMore.value) return
-  page.value++
-  load(true)
-}
-
-function onScroll() {
-  if (loadingMore.value || !hasMore.value) return
-  const bottom = document.documentElement.scrollHeight - document.documentElement.scrollTop - document.documentElement.clientHeight
-  if (bottom < 300) loadMore()
-}
+const { loadingMore, onScroll } = useInfiniteScroll(
+  async () => { page.value++; await load(true) },
+  () => hasMore.value,
+)
 
 function onSearch() {
   clearTimeout(timer)
@@ -55,14 +43,6 @@ function onSearch() {
     load()
   }, 250)
 }
-
-onActivated(() => {
-  window.addEventListener('scroll', onScroll, { passive: true })
-})
-
-onDeactivated(() => {
-  window.removeEventListener('scroll', onScroll)
-})
 
 onBeforeUnmount(() => {
   clearTimeout(timer)
