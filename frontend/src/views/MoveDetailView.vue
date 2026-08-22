@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getMove, type MoveDetail, type MoveLearner } from '../api'
+import { getMove, type MoveDetail } from '../api'
 import { imageUrl } from '../types'
 import TypeBadge from '../components/TypeBadge.vue'
 import CategoryBadge from '../components/CategoryBadge.vue'
@@ -21,13 +21,6 @@ const GENS = [2, 3, 4, 5, 6, 7, 8, 9]
 function goBack() {
   if (window.history.length > 1) router.back()
   else router.push('/moves')
-}
-
-const methodLabel: Record<string, string> = {
-  升级: '升级',
-  机器: '招式机',
-  蛋: '蛋孵化',
-  教授: '教授',
 }
 
 // 每只宝可梦的世代学习数据

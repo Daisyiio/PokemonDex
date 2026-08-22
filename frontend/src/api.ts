@@ -188,8 +188,9 @@ export interface MoveDetail extends MoveListItem {
     flags?: string[]
     z?: { crystal?: string; move?: string; power?: string }
     max?: { move?: string; power?: string }
-    contest?: { type?: string; appeal?: string; jam?: string }
+    contest?: { type?: string; appeal?: string; jam?: string; gen?: number }[]
     effect?: string
+    games?: string[]
     descriptions?: Record<string, string>
   }
 }
