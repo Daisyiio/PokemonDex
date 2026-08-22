@@ -24,6 +24,9 @@ pokemon-dataset-zh-main/
 # archives
 *.zip
 
+# temp / cache
+backend/temp/
+
 # logs
 logs
 *.log
