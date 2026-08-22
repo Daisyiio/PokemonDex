@@ -21,12 +21,11 @@ async function bootstrap() {
   const frontendDist = join(__dirname, '..', '..', 'frontend', 'dist');
   if (existsSync(frontendDist)) {
     app.useStaticAssets(frontendDist);
-    // SPA history fallback：非 /api 路由返回 index.html
+    // SPA fallback：仅处理 GET 且非 /api、非 /images 的请求
     const express = app.getHttpAdapter().getInstance();
-    express.get('*', (req: any, res: any) => {
-      if (req.path.startsWith('/api') || req.path.startsWith('/images')) {
-        return res.status(404).json({ message: 'Not found' });
-      }
+    express.use((req: any, res: any, next: any) => {
+      if (req.method !== 'GET') return next();
+      if (req.path.startsWith('/api') || req.path.startsWith('/images')) return next();
       res.sendFile(join(frontendDist, 'index.html'));
     });
   }
