@@ -140,6 +140,26 @@ export interface ItemListItem {
   icon?: string | null
 }
 
+export interface ItemDetail extends ItemListItem {
+  extra?: {
+    effect?: string
+    usage?: Record<string, string>
+    locations?: { version: string; location: string }[]
+  }
+  poke?: {
+    nameZh?: string
+    nameEn?: string
+    category?: string
+    effect?: string
+    attributes?: string[]
+    prices?: { game: string; buy: number | null; sell: number | null }[]
+  }
+}
+
+export function getItem(id: string | number): Promise<ItemDetail> {
+  return get<ItemDetail>(`${BASE}/items/${id}`)
+}
+
 export interface ListResponse<T> {
   total: number
   page: number
@@ -156,6 +176,11 @@ export interface AbilityLearner {
 
 export interface AbilityDetail extends AbilityInfo {
   learners: AbilityLearner[]
+  extra?: {
+    effect?: string
+    games?: string[]
+    descriptions?: Record<string, string>
+  }
 }
 
 export function getAbility(id: string): Promise<AbilityDetail> {

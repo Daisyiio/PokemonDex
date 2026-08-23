@@ -122,7 +122,15 @@ export class PokemonService {
   }
 
   async detail(id: string) {
-    const p = await this.prisma.pokemon.findUnique({ where: { id } });
+    // 先尝试精确匹配
+    let p = await this.prisma.pokemon.findUnique({ where: { id } });
+    // 如果找不到且 ID 带地区后缀（如 0079G），去掉后缀查基础形态
+    let formSuffix = '';
+    if (!p && /^[A-Z]$/.test(id.slice(-1))) {
+      formSuffix = id.slice(-1);
+      const baseId = id.slice(0, -1);
+      p = await this.prisma.pokemon.findUnique({ where: { id: baseId } });
+    }
     if (!p) return null;
     const detail = JSON.parse(p.detail);
     return {
@@ -133,12 +141,15 @@ export class PokemonService {
         filter: p.filter,
         icon: p.icon,
         image: p.image,
+        formSuffix,
       },
     };
   }
 
   async encounters(id: string) {
-    const p = await this.prisma.pokemon.findUnique({ where: { id } });
+    // 去掉地区后缀查基础形态
+    const baseId = /^[A-Z]$/.test(id.slice(-1)) ? id.slice(0, -1) : id;
+    const p = await this.prisma.pokemon.findUnique({ where: { id: baseId } });
     if (!p) return null;
     if (!p.encounters) return [];
     try {

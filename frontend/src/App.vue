@@ -18,32 +18,13 @@ const navItems = [
   { to: '/type-chart', icon: 'types', label: '克制' },
 ]
 
-const DETAIL_ROUTES = ['pokemon-detail', 'move-detail', 'ability-detail']
-
-// h5 顶栏标题点击目标：详情页回对应列表，列表页回首页；首页不可点
-const headerHref = computed<string | null>(() => {
-  switch (route.name) {
-    case 'home':
-      return null
-    case 'pokemon-detail':
-      return '/'
-    case 'move-detail':
-      return '/moves'
-    case 'ability-detail':
-      return '/abilities'
-    default:
-      return '/'
-  }
-})
+const DETAIL_ROUTES = ['pokemon-detail', 'move-detail', 'ability-detail', 'item-detail']
 
 const isDetail = computed(() => DETAIL_ROUTES.includes(route.name as string))
 
+// 返回箭头：返回上一级
 function goHeaderBack() {
-  if (isDetail.value) {
-    router.back()
-  } else if (headerHref.value) {
-    router.push(headerHref.value)
-  }
+  router.back()
 }
 
 onMounted(initTheme)
@@ -82,16 +63,8 @@ onMounted(initTheme)
       <button class="header-back" @click="goHeaderBack" aria-label="返回上一步">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
       </button>
-      <div class="header-title" aria-live="polite">
-        <span class="header-title-main">{{ route.meta.title }}</span>
-        <span v-if="route.meta.subtitle" class="header-title-sub">{{ route.meta.subtitle }}</span>
-      </div>
     </template>
-    <router-link v-else-if="headerHref" :to="headerHref" class="header-title" aria-live="polite">
-      <span class="header-title-main">{{ route.meta.title }}</span>
-      <span v-if="route.meta.subtitle" class="header-title-sub">{{ route.meta.subtitle }}</span>
-    </router-link>
-    <div v-else class="header-title" aria-live="polite">
+    <div class="header-title" aria-live="polite">
       <span class="header-title-main">{{ route.meta.title }}</span>
       <span v-if="route.meta.subtitle" class="header-title-sub">{{ route.meta.subtitle }}</span>
     </div>
@@ -209,16 +182,15 @@ onMounted(initTheme)
   align-items: center;
   justify-content: center;
   border: none;
-  background: var(--surface);
-  color: var(--text-2);
+  background: transparent;
+  color: var(--text-3);
   border-radius: 50%;
   cursor: pointer;
-  box-shadow: var(--shadow);
-  transition: background 0.2s, transform 0.2s, color 0.2s, box-shadow 0.2s;
+  transition: background 0.2s, transform 0.2s, color 0.2s;
 }
 .theme-btn:hover {
   color: var(--accent);
-  box-shadow: var(--shadow-hover);
+  background: var(--hover-bg);
 }
 .theme-btn:active {
   transform: scale(0.9);

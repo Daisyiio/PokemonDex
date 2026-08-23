@@ -227,6 +227,7 @@ load()
   display: flex;
   gap: 12px;
   align-items: flex-start;
+  text-decoration: none;
   transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 .it-card:hover {

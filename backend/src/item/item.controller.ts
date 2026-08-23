@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ItemService } from './item.service';
 
 @Controller('items')
@@ -18,5 +18,10 @@ export class ItemController {
     @Query('pageSize') pageSize?: number,
   ) {
     return this.itemService.list(search, category, page, pageSize);
+  }
+
+  @Get(':id')
+  detail(@Param('id') id: string) {
+    return this.itemService.detail(id);
   }
 }

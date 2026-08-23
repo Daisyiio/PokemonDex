@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onActivated, ref, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { getPokemon, listPokemonIds, listAbilities, getMovesByGen, getPokemonEncounters, type PokemonNavItem, type MovesByGenResponse, type EncounterEntry } from '../api'
 import { imageUrl, typeColor } from '../types'
@@ -24,7 +24,15 @@ const detail = ref<PokemonDetail | null>(null)
 const error = ref('')
 const activeForm = ref(0)
 const activeTab = ref<'moves' | 'machine' | 'egg' | 'tutor'>('moves')
-const eggOpen = ref<string | null>(null)
+const eggOpen = ref<Set<string>>(new Set())
+
+function toggleEggOpen(name: string) {
+  const s = new Set(eggOpen.value)
+  if (s.has(name)) s.delete(name)
+  else s.add(name)
+  eggOpen.value = s
+}
+
 const openDexGen = ref(0)
 const navList = ref<PokemonNavItem[]>([])
 const abilityMap = ref<Record<string, string>>({})
@@ -109,6 +117,16 @@ async function load() {
     const d = await getPokemon(route.params.id as string)
     detail.value = d
     document.title = `${d.name_zh} - 宝可梦图鉴`
+    // 根据地区后缀自动切换形态
+    const suffix = d._meta?.formSuffix
+    if (suffix) {
+      const regionMap: Record<string, string> = { G: '伽勒尔', H: '洗翠', A: '阿罗拉' }
+      const regionName = regionMap[suffix]
+      if (regionName) {
+        const idx = d.forms.findIndex((f) => f.name.includes(regionName))
+        if (idx >= 0) activeForm.value = idx
+      }
+    }
     const names = d.forms[activeForm.value]?.abilities?.map((a) => a.name) ?? []
     loadAbilities(names)
     getPokemonEncounters(route.params.id as string).then(e => { encounters.value = e }).catch(() => {})
@@ -118,18 +136,25 @@ async function load() {
 }
 
 onMounted(async () => {
-  load()
   navList.value = await listPokemonIds()
   document.addEventListener('click', onGenDocClick)
 })
 
+onActivated(() => {
+  if (detail.value?.id !== route.params.id) {
+    load()
+  }
+})
+
 watch(
   () => route.params.id,
-  () => {
-    load()
-    activeForm.value = 0
-    activeTab.value = 'moves'
-    window.scrollTo({ top: 0 })
+  (newId) => {
+    if (newId && detail.value?.id !== newId) {
+      activeForm.value = 0
+      activeTab.value = 'moves'
+      window.scrollTo({ top: 0 })
+      load()
+    }
   }
 )
 
@@ -161,6 +186,9 @@ function matchFormEntry<T extends { form: string; types?: string[]; data?: unkno
 }
 
 const REGION_PREFIXES = ['阿罗拉', '伽勒尔', '洗翠']
+
+const previewImg = ref<string | null>(null)
+const galleryTab = ref<'normal' | 'shiny'>('normal')
 
 const galleryItems = computed(() => {
   const d = detail.value
@@ -580,30 +608,28 @@ function methodClass(method: string): string {
     </section>
 
     <section v-if="hasGallery" class="section">
-      <h2>形态与异色</h2>
+      <div class="gallery-head">
+        <h2>形态与异色</h2>
+        <div class="gallery-tabs">
+          <button :class="{ active: galleryTab === 'normal' }" @click="galleryTab = 'normal'">普通</button>
+          <button :class="{ active: galleryTab === 'shiny' }" @click="galleryTab = 'shiny'">异色</button>
+        </div>
+      </div>
       <div class="gallery-grid">
         <div v-for="item in galleryItems" :key="item.key" class="gallery-item">
           <div class="gallery-label">{{ item.label }}</div>
-          <div class="gallery-imgs">
-            <div class="gallery-cell" :style="{ background: heroBg() }">
-              <SafeImage
-                v-if="item.src"
-                :src="item.src"
-                :alt="item.label"
-              />
-              <span class="tag">普通</span>
-            </div>
-            <div v-if="item.shinySrc" class="gallery-cell" :style="{ background: heroBg() }">
-              <SafeImage
-                :src="item.shinySrc"
-                :alt="`${item.label} 异色`"
-              />
-              <span class="tag shiny">异色</span>
-            </div>
+          <div class="gallery-cell" :style="{ background: heroBg() }" @click="previewImg = galleryTab === 'shiny' && item.shinySrc ? item.shinySrc : item.src">
+            <SafeImage v-if="galleryTab === 'shiny' && item.shinySrc" :src="item.shinySrc" :alt="`${item.label} 异色`" />
+            <SafeImage v-else :src="item.src" :alt="item.label" />
           </div>
         </div>
       </div>
     </section>
+    <Teleport to="body">
+      <div v-if="previewImg" class="preview-overlay" @click.self="previewImg = null">
+        <img :src="previewImg" class="preview-img" @click="previewImg = null" />
+      </div>
+    </Teleport>
 
     <section v-if="detail.evolution_chains.length" class="section">
       <h2>进化链</h2>
@@ -728,7 +754,7 @@ function methodClass(method: string): string {
             <tr>
               <th v-if="activeTab === 'machine'">学习器</th>
               <th v-else-if="activeTab === 'tutor'">—</th>
-              <th v-else-if="activeTab === 'egg'">来源</th>
+              <th v-else-if="activeTab === 'egg'">亲本</th>
               <th v-else>等级</th>
               <th>名称</th>
               <th>属性</th>
@@ -745,11 +771,11 @@ function methodClass(method: string): string {
                   <template v-if="activeTab === 'egg' && m.parents && m.parents.length">
                     <button
                       class="egg-toggle"
-                      :class="{ open: eggOpen === m.name }"
-                      :title="eggOpen === m.name ? '收起遗传来源' : '查看遗传来源'"
-                      @click="eggOpen = eggOpen === m.name ? null : m.name"
+                      :class="{ open: eggOpen.has(m.name) }"
+                      :title="eggOpen.has(m.name) ? '收起亲本列表' : '查看可遗传该招式的亲本'"
+                      @click="toggleEggOpen(m.name)"
                     >
-                      <span class="egg-toggle-count">来源 {{ m.parents.length }}</span>
+                      <span class="egg-toggle-count">亲本 {{ m.parents.length }}</span>
                       <svg class="egg-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="m6 9 6 6 6-6" />
                       </svg>
@@ -772,16 +798,24 @@ function methodClass(method: string): string {
                 <td class="num">{{ m.pp }}</td>
               </tr>
               <tr
-                v-if="activeTab === 'egg' && m.parents && m.parents.length && eggOpen === m.name"
+                v-if="activeTab === 'egg' && m.parents && m.parents.length && eggOpen.has(m.name)"
                 class="egg-parent-row"
               >
                 <td colspan="7" class="egg-parents">
-                  <span class="ep-label">遗传来源</span>
-                  <span class="ep-chips">
-                    <router-link v-for="p in m.parents" :key="p.id ?? p.name" :to="`/pokemon/${p.id}`" class="ep-chip">
-                      {{ p.name }}
-                    </router-link>
-                  </span>
+                  <div class="ep-label">亲本</div>
+                  <div class="ep-grid">
+                    <template v-for="p in m.parents" :key="p.id ?? p.name">
+                      <router-link v-if="p.type !== 'item'" :to="`/pokemon/${p.id}`" class="ep-chip">
+                        <span class="ep-id">#{{ p.id }}</span>
+                        <span class="ep-name">{{ p.name }}</span>
+                      </router-link>
+                      <span v-else class="ep-chip ep-item">
+                        <span class="ep-name">{{ p.name }}</span>
+                        <span v-if="p.desc" class="ep-item-desc">{{ p.desc }}</span>
+                      </span>
+                    </template>
+                  </div>
+
                 </td>
               </tr>
             </template>
@@ -928,8 +962,40 @@ function methodClass(method: string): string {
 }
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.gallery-head {
+  display: flex;
+  align-items: center;
   gap: 12px;
+  margin-bottom: 12px;
+}
+.gallery-head h2 {
+  margin: 0;
+}
+.gallery-tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  background: var(--surface-3);
+  border-radius: 8px;
+  padding: 2px;
+}
+.gallery-tabs button {
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.gallery-tabs button.active {
+  background: var(--surface);
+  color: var(--accent);
 }
 .gallery-item {
   background: var(--surface-2);
@@ -939,46 +1005,24 @@ function methodClass(method: string): string {
 }
 .gallery-label {
   text-align: center;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text);
-  padding: 9px;
+  padding: 6px;
   border-bottom: 1px solid var(--border-faint);
 }
-.gallery-imgs {
-  display: flex;
-}
 .gallery-cell {
-  flex: 1;
   position: relative;
   aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.gallery-cell + .gallery-cell {
-  border-left: 1px solid var(--border-faint);
+  cursor: pointer;
 }
 .gallery-cell :deep(img) {
   max-width: 82%;
   max-height: 82%;
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.15));
-}
-.tag {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 1px 7px;
-}
-.tag.shiny {
-  color: var(--accent);
-  border-color: var(--accent);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
 }
 .hero-info {
   flex: 1;
@@ -1729,30 +1773,29 @@ function methodClass(method: string): string {
 .moves-table .egg-parents {
   font-size: 12px;
   color: var(--text-faint);
-  padding: 2px 8px 8px;
+  padding: 8px 8px 8px;
   border-top: none;
   white-space: normal;
-  line-height: 1.9;
 }
 .ep-label {
-  margin-right: 8px;
+  margin-bottom: 6px;
   color: var(--text-3);
   font-weight: 600;
+  font-size: 11px;
 }
-.ep-chips {
-  display: inline-flex;
+.ep-grid {
+  display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  align-items: center;
-  vertical-align: middle;
 }
 .ep-chip {
   display: inline-flex;
   align-items: center;
-  padding: 2px 10px;
+  gap: 4px;
+  padding: 4px 10px;
   background: var(--surface);
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 12px;
   color: var(--text-2);
   text-decoration: none;
@@ -1761,6 +1804,26 @@ function methodClass(method: string): string {
 .ep-chip:hover {
   background: var(--hover-bg);
   color: var(--text);
+}
+.ep-id {
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ep-name {
+  color: var(--text-2);
+}
+.ep-item {
+  border-style: dashed;
+  opacity: 0.8;
+  flex-wrap: wrap;
+}
+.ep-item-desc {
+  width: 100%;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin-top: 2px;
 }
 .moves-table .empty {
   text-align: center;
@@ -2001,108 +2064,41 @@ function methodClass(method: string): string {
   .table-wrap {
     margin: 0;
     max-height: none;
-    overflow: visible;
+    overflow: auto;
     border: none;
+    -webkit-overflow-scrolling: touch;
   }
-  .moves-table,
-  .moves-table tbody {
-    display: block;
-    min-width: 0;
-  }
-  .moves-table thead {
-    display: none;
-  }
-  .moves-table tr {
-    display: grid;
-    grid-template-areas:
-      'name name lvl'
-      'type cat .'
-      'pw acc pp';
-    grid-template-columns: 1fr 1fr 1fr;
-    align-items: center;
-    gap: 8px 10px;
-    padding: 12px;
-    margin-bottom: 8px;
-    background: var(--surface-2);
-    border: 1px solid var(--border-faint);
-    border-radius: 12px;
-  }
-  .moves-table td {
-    display: block;
-    border: none;
-    padding: 0;
-    white-space: nowrap;
-  }
-  .moves-table td:first-child {
-    grid-area: lvl;
-    text-align: right;
-    color: var(--text-3);
+  .moves-table {
     font-size: 12px;
+    min-width: 580px;
   }
-  .moves-table td:first-child::before {
-    content: '等级';
-    margin-right: 4px;
+  .moves-table th,
+  .moves-table td {
+    padding: 7px 8px;
   }
-  .table-wrap.is-machine .moves-table td:first-child::before {
-    content: '学习器';
-  }
-  .moves-table td:nth-child(2) {
-    grid-area: name;
-    font-size: 14px;
-    font-weight: 700;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .moves-table td:nth-child(3) {
-    grid-area: type;
-  }
-  .moves-table td:nth-child(4) {
-    grid-area: cat;
-  }
-  .moves-table td:nth-child(5) {
-    grid-area: pw;
-  }
-  .moves-table td:nth-child(6) {
-    grid-area: acc;
-  }
-  .moves-table td:nth-child(7) {
-    grid-area: pp;
-  }
-  .moves-table td:nth-child(n + 5) {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .moves-table td:nth-child(n + 5)::before {
+  .moves-table th {
     font-size: 11px;
-    font-weight: 500;
-    color: var(--text-3);
-  }
-  .moves-table td:nth-child(5)::before {
-    content: '威力';
-  }
-  .moves-table td:nth-child(6)::before {
-    content: '命中';
-  }
-  .moves-table td:nth-child(7)::before {
-    content: 'PP';
-  }
-  .moves-table tr:has(td.empty) {
-    display: block;
-  }
-  .moves-table td.empty {
-    grid-column: 1 / -1;
-    padding: 16px;
-    text-align: center;
-  }
-  .moves-table td.empty::before {
-    content: none;
   }
   .moves-table tbody tr:hover {
     background: var(--surface-2);
+  }
+  .egg-toggle {
+    padding: 2px 6px;
+    font-size: 11px;
+  }
+  .moves-table .egg-parents {
+    padding: 6px 8px;
+  }
+  .ep-grid {
+    gap: 4px;
+  }
+  .ep-chip {
+    padding: 3px 8px;
+    font-size: 11px;
+    gap: 3px;
+  }
+  .ep-id {
+    font-size: 10px;
   }
   .encounter-table-wrap {
     max-height: none;
@@ -2178,5 +2174,22 @@ function methodClass(method: string): string {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
   }
+}
+.preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+.preview-overlay img {
+  max-width: 85vw;
+  max-height: 85vh;
+  object-fit: contain;
 }
 </style>

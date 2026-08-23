@@ -1027,13 +1027,11 @@ onBeforeUnmount(() => {
   font-weight: 700;
   letter-spacing: 0.3px;
   cursor: pointer;
-  box-shadow: 0 2px 10px var(--accent-strong), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+  transition: transform 0.15s, filter 0.15s;
 }
 .btn-main:hover:not(:disabled) {
   transform: translateY(-2px);
   filter: brightness(1.06);
-  box-shadow: 0 4px 18px var(--accent-strong), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 .btn-main:active:not(:disabled) {
   transform: translateY(0) scale(0.98);
@@ -1046,7 +1044,7 @@ onBeforeUnmount(() => {
 }
 .btn-main:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-soft), 0 4px 18px var(--accent-strong);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .btn-main-icon { flex-shrink: 0; }
 .btn-main-loader {
@@ -1132,7 +1130,7 @@ onBeforeUnmount(() => {
 .mode-btn.active {
   background: var(--surface);
   color: var(--accent);
-  box-shadow: 0 1px 4px var(--shadow), inset 0 0 0 1px var(--border-soft);
+  box-shadow: inset 0 0 0 1px var(--border-soft);
 }
 .mode-btn:focus-visible {
   outline: none;
@@ -1836,6 +1834,63 @@ onBeforeUnmount(() => {
   .vc-mon-name { font-size: 11px; max-width: 60px; }
   .vc-x { font-size: 16px; }
   .vc-arrow { font-size: 18px; }
+  .dp-table-wrap {
+    border: none;
+    border-radius: 0;
+  }
+  .dp-table {
+    font-size: 12px;
+    min-width: 520px;
+  }
+  .dp-table th,
+  .dp-table td {
+    padding: 7px 8px;
+    white-space: nowrap;
+  }
+  .dp-table th {
+    font-size: 11px;
+  }
+  .dp-thumb {
+    width: 28px;
+    height: 28px;
+  }
+  .dp-name {
+    font-size: 12px;
+  }
+  .dp-id {
+    font-size: 10px;
+  }
+  .dp-td-eg,
+  .dp-td-moves {
+    white-space: nowrap;
+  }
+  .dp-eg-tag {
+    font-size: 10px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+  .dp-move-tag {
+    font-size: 10px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+  .dp-learn-item {
+    gap: 2px;
+  }
+  .dp-learn-move {
+    font-size: 10px;
+  }
+  .dp-learn-method {
+    font-size: 9px;
+    padding: 0 4px;
+  }
+  .dp-td-note {
+    min-width: 80px;
+  }
+  .dp-src-tag {
+    font-size: 10px;
+    padding: 1px 6px;
+  }
 }
 
 /* 招式学习途径弹窗 */
@@ -1859,7 +1914,6 @@ onBeforeUnmount(() => {
   width: calc(100% - 40px);
   height: 70vh;
   max-height: 600px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
   overflow: hidden;
 }
 .popup-hd {

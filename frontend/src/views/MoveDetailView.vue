@@ -641,12 +641,15 @@ onMounted(load)
   line-height: 1.3;
 }
 .learner-lv.egg {
+  color: #fff;
   background: var(--method-pink);
 }
 .learner-lv.tm {
+  color: #fff;
   background: var(--method-blue);
 }
 .learner-lv.tutor {
+  color: #fff;
   background: var(--method-purple);
 }
 .learner-methods {

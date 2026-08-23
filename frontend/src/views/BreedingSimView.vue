@@ -967,7 +967,7 @@ onMounted(async () => {
 }
 .result.shiny {
   border-color: #f5c518;
-  box-shadow: 0 0 0 3px rgba(245, 197, 24, 0.25), var(--shadow-hover);
+  box-shadow: 0 0 0 3px rgba(245, 197, 24, 0.25);
 }
 .shiny-badge {
   position: absolute;

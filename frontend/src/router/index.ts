@@ -6,6 +6,7 @@ import MoveDetailView from '../views/MoveDetailView.vue'
 import AbilitiesView from '../views/AbilitiesView.vue'
 import AbilityDetailView from '../views/AbilityDetailView.vue'
 import ItemsView from '../views/ItemsView.vue'
+import ItemDetailView from '../views/ItemDetailView.vue'
 import TypeChartView from '../views/TypeChartView.vue'
 import EggGroupsView from '../views/EggGroupsView.vue'
 import BreedingSimView from '../views/BreedingSimView.vue'
@@ -55,6 +56,12 @@ const router = createRouter({
       name: 'items',
       component: ItemsView,
       meta: { title: '道具图鉴', subtitle: '道具百科' },
+    },
+    {
+      path: '/items/:id',
+      name: 'item-detail',
+      component: ItemDetailView,
+      meta: { title: '道具详情' },
     },
     {
       path: '/type-chart',

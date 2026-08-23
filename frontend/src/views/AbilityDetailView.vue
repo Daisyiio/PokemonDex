@@ -67,6 +67,27 @@ onMounted(load)
         <p class="ab-desc" v-if="ability.description">{{ ability.description }}</p>
       </section>
 
+      <!-- 额外数据 -->
+      <section v-if="ability.extra" class="extra-section">
+        <div v-if="ability.extra.effect" class="extra-block">
+          <h3>特性效果</h3>
+          <p>{{ ability.extra.effect }}</p>
+        </div>
+        <div v-if="ability.extra.games && ability.extra.games.length" class="extra-block">
+          <h3>出现游戏</h3>
+          <div class="extra-tags">
+            <span v-for="g in ability.extra.games" :key="g" class="extra-tag">{{ g }}</span>
+          </div>
+        </div>
+        <div v-if="ability.extra.descriptions" class="extra-block">
+          <h3>游戏描述</h3>
+          <div v-for="(desc, game) in ability.extra.descriptions" :key="game" class="extra-desc">
+            <span class="extra-game">{{ game }}</span>
+            <span class="extra-text">{{ desc }}</span>
+          </div>
+        </div>
+      </section>
+
       <section class="learners">
         <h2>拥有宝可梦 <span class="count">{{ ability.learners.length }} 只</span></h2>
         <div v-if="ability.learners.length === 0" class="no-learners">
@@ -196,6 +217,66 @@ onMounted(load)
   margin: 0;
   font-size: 14px;
   line-height: 1.8;
+  color: var(--text-2);
+}
+.extra-section {
+  background: var(--surface);
+  border: 1px solid var(--border-faint);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+.extra-block {
+  margin-bottom: 14px;
+}
+.extra-block:last-child {
+  margin-bottom: 0;
+}
+.extra-block h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text);
+}
+.extra-block p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-2);
+  white-space: pre-line;
+}
+.extra-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.extra-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+.extra-desc {
+  display: flex;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--border-faint);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.extra-desc:last-child {
+  border-bottom: none;
+}
+.extra-game {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--text-3);
+  min-width: 90px;
+}
+.extra-text {
   color: var(--text-2);
 }
 .learners h2 {

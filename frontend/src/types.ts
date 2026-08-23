@@ -100,7 +100,7 @@ export interface PokemonDetail {
   machine_moves: { form: string; data: MoveEntry[] }[]
   egg_moves: { form: string; data: MoveEntry[] }[]
   home_images: { name: string; image: string; shiny: string }[]
-  _meta: { id: string; gen: number | null; filter: string | null; icon: string | null; image: string | null }
+  _meta: { id: string; gen: number | null; filter: string | null; icon: string | null; image: string | null; formSuffix?: string }
 }
 
 export interface TypeInfo {

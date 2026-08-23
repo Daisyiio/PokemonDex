@@ -28,6 +28,7 @@ const searchResults = ref<PokemonSummary[]>([])
 const showDropdown = ref(false)
 const activeIndex = ref(-1)
 const searchInputEl = ref<HTMLInputElement | null>(null)
+const searchFocused = ref(false)
 const dropStyle = ref<{ top: string; left: string; width: string }>({
   top: '0px',
   left: '0px',
@@ -172,6 +173,7 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function onInputBlur() {
+  searchFocused.value = false
   window.setTimeout(() => {
     closeDropdown()
   }, 120)
@@ -211,7 +213,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="home">
-    <div class="filters">
+    <div class="filters" :class="{ 'search-active': searchFocused }">
       <div class="search-box">
         <input
           ref="searchInputEl"
@@ -221,6 +223,7 @@ onBeforeUnmount(() => {
           placeholder="搜索名称 / 编号 / 英文名…"
           @input="onSearchInput"
           @keydown="onKeydown"
+          @focus="searchFocused = true"
           @blur="onInputBlur"
         />
         <Transition name="drop">
@@ -854,6 +857,14 @@ onBeforeUnmount(() => {
   }
   .search-box {
     min-width: 0;
+  }
+  .filters.search-active .search-box {
+    flex: 1;
+    min-width: 0;
+  }
+  .filters.search-active .select-wrap,
+  .filters.search-active .count {
+    display: none;
   }
   .select-wrap {
     flex: 0 0 auto;

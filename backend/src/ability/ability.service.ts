@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 
 export interface AbilityLearner {
   id: string;
@@ -14,6 +16,23 @@ export class AbilityService {
   constructor(private readonly prisma: PrismaService) {}
 
   private static learnersCache: Map<string, AbilityLearner[]> | null = null;
+
+  private static extraCache: Record<string, any> | null = null;
+
+  private loadExtra() {
+    if (AbilityService.extraCache) return AbilityService.extraCache;
+    const path = join(__dirname, '..', '..', 'data', 'abilities_extra.json');
+    if (existsSync(path)) {
+      try {
+        AbilityService.extraCache = JSON.parse(readFileSync(path, 'utf-8'));
+      } catch {
+        AbilityService.extraCache = {};
+      }
+    } else {
+      AbilityService.extraCache = {};
+    }
+    return AbilityService.extraCache;
+  }
 
   private async learners(): Promise<Map<string, AbilityLearner[]>> {
     if (AbilityService.learnersCache) return AbilityService.learnersCache;
@@ -48,9 +67,11 @@ export class AbilityService {
   async detail(id: string) {
     const ability = await this.prisma.ability.findUnique({ where: { id } });
     if (!ability) return null;
+    const extraMap = this.loadExtra();
     return {
       ...ability,
       learners: (await this.learners()).get(ability.nameZh) ?? [],
+      extra: extraMap[id] || null,
     };
   }
 
