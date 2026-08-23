@@ -24,6 +24,13 @@ export interface PokedexEntry {
   versions: { name: string; group: string; text: string }[]
 }
 
+export interface EggMoveParent {
+  id: string | null
+  name: string
+  type?: string
+  desc?: string
+}
+
 export interface MoveEntry {
   level?: string
   machine?: string
@@ -33,7 +40,7 @@ export interface MoveEntry {
   power: string
   accuracy: string
   pp: string
-  parents?: { id: string | null; name: string }[]
+  parents?: EggMoveParent[]
 }
 
 export interface Form {
@@ -178,7 +185,7 @@ export interface BreedingEggMove {
   type: string
   category: string
   power: string
-  parents: { id: string | null; name: string }[]
+  parents: EggMoveParent[]
 }
 
 export interface BreedingMovesResponse {
@@ -194,7 +201,7 @@ export interface BreedingPlan {
   target: BreedingBrief
   line: BreedingBrief[]
   selfMoveNames: string[]
-  requiredEgg: { name: string; parents: { id: string | null; name: string }[] }[]
+  requiredEgg: { name: string; parents: EggMoveParent[] }[]
   infeasible: string[]
   mother: { candidates: BreedingBrief[]; requirement: string; allowsDitto: boolean }
   father: { candidates: BreedingBrief[]; requirement: string; allowsDitto: boolean }
@@ -234,7 +241,7 @@ export interface GeneticsEggMove {
   accuracy: string
   pp: string
   marker?: string
-  parents: { id: string | null; name: string }[]
+  parents: EggMoveParent[]
 }
 
 export interface GeneticsEggMovesResponse {

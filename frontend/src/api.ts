@@ -8,6 +8,7 @@ import type {
   GeneticsBrief,
   GeneticsEggMovesResponse,
   GeneticsPlan,
+  EggMoveParent,
 } from './types'
 
 const BASE = '/api'
@@ -344,7 +345,7 @@ export interface MovesByGenResponse {
   generation: number
   learnable: { name: string; level: string; type: string; category: string; power: string; accuracy: string; pp: string }[]
   machine: { name: string; tm: string; type: string; category: string; power: string; accuracy: string; pp: string }[]
-  egg: { name: string; type: string; category: string; power: string; accuracy: string; pp: string; parents: { id: string | null; name: string }[] }[]
+  egg: { name: string; type: string; category: string; power: string; accuracy: string; pp: string; parents: EggMoveParent[] }[]
   tutor: { name: string; type: string; category: string; power: string; accuracy: string; pp: string }[]
 }
 

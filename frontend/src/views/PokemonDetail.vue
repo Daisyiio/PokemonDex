@@ -141,7 +141,7 @@ onMounted(async () => {
 })
 
 onActivated(() => {
-  if (detail.value?.id !== route.params.id) {
+  if (detail.value?._meta.id !== route.params.id) {
     load()
   }
 })
@@ -149,7 +149,7 @@ onActivated(() => {
 watch(
   () => route.params.id,
   (newId) => {
-    if (newId && detail.value?.id !== newId) {
+    if (newId && detail.value?._meta.id !== newId) {
       activeForm.value = 0
       activeTab.value = 'moves'
       window.scrollTo({ top: 0 })

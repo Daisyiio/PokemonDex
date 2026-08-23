@@ -147,6 +147,22 @@ html[data-theme='dark'] {
   -webkit-tap-highlight-color: transparent;
 }
 
+button,
+a,
+input,
+select {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input[type='text'],
+input[type='search'],
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 body {
   margin: 0;
   transition: background-color 0.3s ease;
