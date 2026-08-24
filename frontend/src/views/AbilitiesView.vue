@@ -261,6 +261,12 @@ load()
   animation: spin 0.6s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 640px) {
+  .search-box {
+    max-width: none;
+    width: 100%;
+  }
+}
 .scroll-end {
   text-align: center;
   padding: 20px 0;

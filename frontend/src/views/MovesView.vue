@@ -68,6 +68,8 @@ function setCategory(c: string) {
   load()
 }
 
+const filterOpen = ref(false)
+
 onBeforeUnmount(() => {
   clearTimeout(timer)
   window.removeEventListener('scroll', onScroll)
@@ -95,10 +97,34 @@ load()
           <circle cx="11" cy="11" r="7" />
           <path d="M20 20l-3.5-3.5" />
         </svg>
-      </div>
+</div>
     </div>
 
-<div class="filter-group">
+<div class="filter-drop">
+    <div class="filter-toggle" :class="{ 'filter-open': filterOpen, 'has-filter': categoryFilter || typeFilter }" @click="filterOpen = !filterOpen">
+      <template v-if="categoryFilter || typeFilter">
+        <span v-if="categoryFilter" class="filter-chip" :style="{ background: CATEGORY_COLORS[categoryFilter] }">
+          <span class="chip-icon" :style="{ background: CATEGORY_COLORS[categoryFilter] }">
+            <span class="picon" :class="`picon-c-${categoryFilter}`" />
+          </span>
+          <span>{{ categoryFilter }}</span>
+        </span>
+        <span v-if="typeFilter" class="filter-chip" :style="{ background: TYPE_COLORS[typeFilter] }">
+          <span class="chip-icon" :style="{ background: TYPE_COLORS[typeFilter] }">
+            <span class="picon" :class="`picon-t-${typeFilter}`" />
+          </span>
+          <span>{{ typeFilter }}</span>
+        </span>
+      </template>
+      <template v-else>
+        <span>筛选条件</span>
+      </template>
+      <svg class="filter-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    </div>
+    <transition name="drop">
+<div class="filter-group" v-show="filterOpen">
       <div class="filter-row">
         <span class="filter-label">分类</span>
         <button
@@ -130,7 +156,9 @@ load()
           </span>
           <span class="type-text">{{ t }}</span>
         </button>
-      </div>
+</div>
+    </div>
+    </transition>
     </div>
 
     <div v-if="loading && items.length === 0" class="grid">
@@ -231,6 +259,14 @@ load()
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-faint);
+}
+.filter-toggle {
+  display: none;
+}
+@media (min-width: 641px) {
+  .filter-group {
+    display: block !important;
+  }
 }
 .filter-row {
   display: flex;
@@ -426,6 +462,55 @@ load()
   100% { transform: translateX(100%); }
 }
 @media (max-width: 640px) {
+  .search-box {
+    max-width: none;
+    width: 100%;
+  }
+  .filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .filter-toggle.has-filter {
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px 1px 2px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .filter-chip .chip-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .filter-chip .chip-icon .picon {
+    font-size: 11px;
+  }
+  .filter-chevron {
+    margin-left: auto;
+    transition: transform 0.2s;
+  }
+  .filter-open .filter-chevron {
+    transform: rotate(90deg);
+  }
   .grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   }

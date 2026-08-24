@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { listItems, listItemCategories, type ItemListItem } from '../api'
 import { imageUrl } from '../types'
 import SafeImage from '../components/SafeImage.vue'
@@ -16,6 +16,8 @@ const loading = ref(false)
 const hasMore = ref(true)
 const search = ref('')
 const categoryFilter = ref('')
+const filterOpen = ref(false)
+const activeFilterCount = computed(() => (categoryFilter.value ? 1 : 0))
 let timer: number | undefined
 
 async function load(append = false) {
@@ -90,7 +92,14 @@ load()
       </div>
     </div>
 
-    <div class="filter-row">
+    <div class="filter-toggle" :class="{ 'filter-open': filterOpen }" @click="filterOpen = !filterOpen">
+      <span>筛选</span>
+      <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span>
+      <svg class="filter-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    </div>
+    <div class="filter-row" v-show="filterOpen || activeFilterCount > 0 || search">
       <button
         class="chip"
         :class="{ on: categoryFilter === '' }"
@@ -188,6 +197,14 @@ load()
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-faint);
+}
+.filter-toggle {
+  display: none;
+}
+@media (min-width: 641px) {
+  .filter-row {
+    display: flex !important;
+  }
 }
 .filter-row {
   display: flex;
@@ -318,6 +335,45 @@ load()
   animation: spin 0.6s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 640px) {
+  .search-box {
+    max-width: none;
+    width: 100%;
+  }
+  .filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .filter-count {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+  }
+  .filter-chevron {
+    margin-left: auto;
+    transition: transform 0.2s;
+  }
+  .filter-open .filter-chevron {
+    transform: rotate(90deg);
+  }
+}
 .scroll-end {
   text-align: center;
   padding: 20px 0;

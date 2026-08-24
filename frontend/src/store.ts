@@ -2,14 +2,14 @@ import { reactive, ref } from 'vue'
 
 export const listState = reactive({
   search: '',
-  type: '',
+  types: [] as string[],
   gen: '',
   page: 1,
 })
 
 const THEME_KEY = 'dex-theme'
 
-export const theme = ref<'light' | 'dark'>('light')
+export const theme = ref<'light' | 'dark'>('dark')
 
 export function applyTheme() {
   document.documentElement.setAttribute('data-theme', theme.value)
@@ -17,7 +17,11 @@ export function applyTheme() {
 
 export function initTheme() {
   const saved = localStorage.getItem(THEME_KEY)
-  theme.value = saved === 'dark' ? 'dark' : 'light'
+  if (saved === 'light' || saved === 'dark') {
+    theme.value = saved
+  } else {
+    theme.value = 'dark'
+  }
   applyTheme()
 }
 

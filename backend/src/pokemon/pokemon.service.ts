@@ -29,7 +29,12 @@ export class PokemonService {
       ];
     }
     if (type) {
-      where.types = { contains: type };
+      const types = type.split(',').map(t => t.trim()).filter(Boolean);
+      if (types.length === 1) {
+        where.types = { contains: types[0] };
+      } else if (types.length > 1) {
+        where.AND = types.map(t => ({ types: { contains: t } }));
+      }
     }
     if (gen) {
       where.gen = Number(gen);

@@ -1530,6 +1530,7 @@ function methodClass(method: string): string {
   padding: 2px 8px;
   border-radius: 14px;
   line-height: 1.5;
+  white-space: nowrap;
 }
 .eff-val {
   font-size: 13px;
@@ -2051,7 +2052,16 @@ function methodClass(method: string): string {
     font-size: 12px;
   }
   .eff-items {
-    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: 6px;
+  }
+  .eff-type {
+    font-size: 11px;
+    padding: 1px 6px;
+    gap: 4px;
+  }
+  .eff-val {
+    font-size: 12px;
   }
   .evo-img {
     width: 84px;

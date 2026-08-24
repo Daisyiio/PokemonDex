@@ -47,7 +47,7 @@ async function load(append = false) {
   try {
     const res = await listPokemon({
       search: listState.search || undefined,
-      type: listState.type || undefined,
+      type: listState.types.length ? listState.types.join(',') : undefined,
       gen: listState.gen ? Number(listState.gen) : undefined,
       page: listState.page,
       pageSize,
@@ -72,9 +72,13 @@ function applyFilters() {
 }
 
 function toggleType(t: string) {
-  listState.type = listState.type === t ? '' : t
+  const idx = listState.types.indexOf(t)
+  if (idx >= 0) listState.types.splice(idx, 1)
+  else listState.types.push(t)
   applyFilters()
 }
+
+const filterOpen = ref(false)
 
 function goDetail(id: string) {
   closeDropdown()
@@ -186,7 +190,7 @@ function onOutsideClick(e: MouseEvent) {
   }
 }
 
-watch(() => [listState.type, listState.gen], applyFilters)
+watch(() => [listState.types, listState.gen], applyFilters)
 
 onMounted(async () => {
   load()
@@ -290,25 +294,45 @@ onBeforeUnmount(() => {
       <span class="count">共 {{ total }} 只</span>
     </div>
 
-    <div class="type-chips">
-      <button
-        v-for="t in types"
-        :key="t.name"
-        class="chip"
-        :class="{ active: listState.type === t.name }"
-        :style="
-          listState.type === t.name
-            ? { background: typeColor(t.name), borderColor: typeColor(t.name) }
-            : {}
-        "
-        @click="toggleType(t.name)"
-      >
-        <span class="chip-icon" :style="{ background: typeColor(t.name) }">
-          <span class="picon" :class="`picon-t-${t.name}`" />
-        </span>
-        <span class="chip-name">{{ t.name }}</span>
-        <span class="chip-count">{{ t.count }}</span>
-      </button>
+    <div class="filter-drop">
+      <div class="filter-toggle" :class="{ 'filter-open': filterOpen, 'has-filter': listState.types.length > 0 }" @click="filterOpen = !filterOpen">
+        <template v-if="listState.types.length > 0">
+          <span v-for="t in listState.types" :key="t" class="filter-chip" :style="{ background: typeColor(t) }">
+            <span class="chip-icon" :style="{ background: typeColor(t) }">
+              <span class="picon" :class="`picon-t-${t}`" />
+            </span>
+            <span>{{ t }}</span>
+          </span>
+        </template>
+        <template v-else>
+          <span>属性筛选</span>
+        </template>
+        <svg class="filter-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      </div>
+      <transition name="drop">
+        <div class="type-chips" v-show="filterOpen">
+          <button
+            v-for="t in types"
+            :key="t.name"
+            class="chip"
+            :class="{ active: listState.types.includes(t.name) }"
+            :style="
+              listState.types.includes(t.name)
+                ? { background: typeColor(t.name), borderColor: typeColor(t.name) }
+                : {}
+            "
+            @click="toggleType(t.name)"
+          >
+            <span class="chip-icon" :style="{ background: typeColor(t.name) }">
+              <span class="picon" :class="`picon-t-${t.name}`" />
+            </span>
+            <span class="chip-name">{{ t.name }}</span>
+            <span class="chip-count">{{ t.count }}</span>
+          </button>
+        </div>
+      </transition>
     </div>
 
     <div class="toolbar">
@@ -547,6 +571,15 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 
+.filter-toggle {
+  display: none;
+}
+@media (min-width: 641px) {
+  .type-chips {
+    display: flex !important;
+    position: static;
+  }
+}
 .type-chips {
   display: flex;
   flex-wrap: wrap;
@@ -844,7 +877,68 @@ onBeforeUnmount(() => {
     max-height: 78px;
   }
   .type-chips {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    max-height: 260px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--drop-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 0;
     gap: 6px;
+  }
+  .filter-drop {
+    position: relative;
+  }
+  .filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+.filter-toggle.has-filter {
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px 1px 2px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .filter-chip .chip-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .filter-chip .chip-icon .picon {
+    font-size: 11px;
+  }
+  .filter-chevron {
+    margin-left: auto;
+    transition: transform 0.2s;
+  }
+  .filter-open .filter-chevron {
+    transform: rotate(90deg);
   }
   .chip {
     padding: 3px 10px 3px 3px;
