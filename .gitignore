@@ -27,9 +27,6 @@ pokemon-dataset-zh-main/
 # temp / cache
 backend/temp/
 
-# 像素素材（体积大，不提交；用 download-pixel-*.js 脚本生成）
-pixel-assets/
-
 # logs
 logs
 *.log
