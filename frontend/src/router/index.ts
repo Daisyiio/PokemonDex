@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { nextTick } from 'vue'
 import HomeView from '../views/HomeView.vue'
 import PokemonDetail from '../views/PokemonDetail.vue'
 import MovesView from '../views/MovesView.vue'
@@ -11,6 +12,8 @@ import TypeChartView from '../views/TypeChartView.vue'
 import EggGroupsView from '../views/EggGroupsView.vue'
 import BreedingSimView from '../views/BreedingSimView.vue'
 import GeneticsView from '../views/GeneticsView.vue'
+
+const scrollCache = new Map<string, { top: number }>()
 
 const router = createRouter({
   history: createWebHistory(),
@@ -89,10 +92,21 @@ const router = createRouter({
     },
   ],
   scrollBehavior(to, _from, savedPosition) {
-    if (to.name === 'home') return false
     if (savedPosition) return savedPosition
-    return { top: 0 }
+    const cached = scrollCache.get(to.path)
+    if (cached) { scrollCache.delete(to.path); return cached }
+    return new Promise((resolve) => {
+      nextTick(() => resolve({ top: 0 }))
+    })
   },
+})
+
+const LIST_ROUTES = ['/', '/moves', '/abilities', '/items', '/type-chart', '/egg-groups', '/genetics', '/breeding']
+
+router.beforeEach((_to, from) => {
+  if (LIST_ROUTES.includes(from.path)) {
+    scrollCache.set(from.path, { top: window.scrollY })
+  }
 })
 
 export default router

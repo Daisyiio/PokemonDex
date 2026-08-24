@@ -1496,11 +1496,12 @@ function methodClass(method: string): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 4px;
+  padding: 4px 8px;
   border-radius: 12px;
   background: var(--surface-2);
   border: 1px solid transparent;
+  overflow: hidden;
 }
 .eff-item.eff-weak4 {
   background: var(--eff-weak4-bg);
@@ -1526,16 +1527,18 @@ function methodClass(method: string): string {
   align-items: center;
   gap: 5px;
   color: var(--on-accent);
-  font-size: 12px;
-  padding: 2px 8px;
+  font-size: 11px;
+  padding: 2px 6px;
   border-radius: 14px;
-  line-height: 1.5;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 .eff-val {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text-2);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .evo-chain {
