@@ -49,6 +49,27 @@ defineProps<{ name: string }>()
       <line x1="12" y1="10" x2="12" y2="15" />
       <circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none" />
     </g>
+    <g v-else-if="name === 'beads'">
+      <rect x="3.6" y="3.6" width="16.8" height="16.8" rx="2.2" />
+      <circle cx="8" cy="8" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="8" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="8" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="12" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="12" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="16" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="16" r="1.35" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="16" r="1.35" fill="currentColor" stroke="none" />
+    </g>
+    <g v-else-if="name === 'more'">
+      <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" />
+    </g>
+    <g v-else-if="name === 'close'">
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </g>
     <circle v-else cx="12" cy="12" r="8" />
   </svg>
 </template>

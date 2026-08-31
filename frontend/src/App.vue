@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { initTheme, theme, toggleTheme } from './store'
 import NavIcon from './components/NavIcon.vue'
@@ -16,7 +16,53 @@ const navItems = [
   { to: '/egg-groups', icon: 'egg', label: '蛋组' },
   { to: '/genetics', icon: 'genetics', label: '遗传' },
   { to: '/type-chart', icon: 'types', label: '克制' },
+  { to: '/beads', icon: 'beads', label: '拼豆' },
 ]
+
+const tabMainItems = [
+  { to: '/', exact: true, icon: 'dex', label: '图鉴' },
+  { to: '/moves', icon: 'moves', label: '招式' },
+  { to: '/abilities', icon: 'abilities', label: '特性' },
+  { to: '/items', icon: 'items', label: '道具' },
+]
+
+const tabMoreItems = [
+  { to: '/egg-groups', icon: 'egg', label: '蛋组' },
+  { to: '/genetics', icon: 'genetics', label: '遗传' },
+  { to: '/type-chart', icon: 'types', label: '克制' },
+  { to: '/beads', icon: 'beads', label: '拼豆' },
+]
+
+const moreOpen = ref(false)
+
+const isTabOn = (item: { to: string; exact?: boolean }) =>
+  item.exact ? route.path === item.to : route.path.startsWith(item.to)
+
+const moreActive = computed(() =>
+  tabMoreItems.some((i) => isTabOn(i))
+)
+
+function toggleMore() {
+  moreOpen.value = !moreOpen.value
+}
+
+function pickMore() {
+  moreOpen.value = false
+}
+
+function onDocClick(e: MouseEvent) {
+  if (moreOpen.value && !(e.target as HTMLElement).closest('.tab-bar')) {
+    moreOpen.value = false
+  }
+}
+
+onMounted(() => {
+  initTheme()
+  document.addEventListener('click', onDocClick)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClick)
+})
 
 const DETAIL_ROUTES = ['pokemon-detail', 'move-detail', 'ability-detail', 'item-detail']
 
@@ -26,8 +72,6 @@ const isDetail = computed(() => DETAIL_ROUTES.includes(route.name as string))
 function goHeaderBack() {
   router.back()
 }
-
-onMounted(initTheme)
 </script>
 
 <template>
@@ -114,16 +158,46 @@ onMounted(initTheme)
 
   <nav class="tab-bar frosted" aria-label="底部导航">
     <router-link
-      v-for="item in navItems"
+      v-for="item in tabMainItems"
       :key="item.to"
       :to="item.to"
       class="tab-item"
-      :class="{ 'tab-on': item.exact ? route.path === item.to : route.path.startsWith(item.to) }"
+      :class="{ 'tab-on': isTabOn(item) }"
     >
       <NavIcon :name="item.icon" />
       <span class="tab-label">{{ item.label }}</span>
     </router-link>
+
+    <button
+      type="button"
+      class="tab-item tab-more"
+      :class="{ 'tab-on': moreActive }"
+      @click="toggleMore"
+    >
+      <NavIcon :name="moreOpen ? 'close' : 'more'" />
+      <span class="tab-label">更多</span>
+    </button>
+
+    <Transition name="fade">
+      <div v-if="moreOpen" class="more-overlay" @click="moreOpen = false"></div>
+    </Transition>
   </nav>
+
+  <Transition name="more">
+    <div v-if="moreOpen" class="more-panel" role="menu" aria-label="更多功能">
+      <router-link
+        v-for="item in tabMoreItems"
+        :key="item.to"
+        :to="item.to"
+        class="more-item"
+        :class="{ on: isTabOn(item) }"
+        @click="pickMore"
+      >
+        <span class="more-icon"><NavIcon :name="item.icon" /></span>
+        <span class="more-label">{{ item.label }}</span>
+      </router-link>
+    </div>
+  </Transition>
 
   <footer class="app-footer">
     <span>宝可梦相关名称、角色、图像及数据素材版权归 © The Pokémon Company / Nintendo / Game Freak 所有。</span>
@@ -365,7 +439,7 @@ onMounted(initTheme)
   }
   .tab-item {
     flex: 1;
-    max-width: 72px;
+    max-width: 88px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -373,6 +447,9 @@ onMounted(initTheme)
     padding: 5px 2px;
     text-decoration: none;
     color: var(--text-3);
+    background: none;
+    border: none;
+    font: inherit;
     border-radius: 12px;
     transition: color 0.18s, transform 0.18s;
     -webkit-tap-highlight-color: transparent;
@@ -392,6 +469,77 @@ onMounted(initTheme)
   }
   .tab-item.tab-on .nav-icon {
     filter: drop-shadow(0 1px 3px var(--accent-soft));
+  }
+
+  .more-overlay {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 21;
+    background: var(--overlay);
+  }
+  .more-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(56px + env(safe-area-inset-bottom));
+    z-index: 22;
+    background: var(--drop-bg);
+    border-radius: 20px 20px 0 0;
+    border: 1px solid var(--border-soft);
+    border-bottom: none;
+    padding: 14px 16px calc(8px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .more-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 4px;
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--text-2);
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .more-item:hover {
+    background: var(--drop-hover);
+  }
+  .more-item.on {
+    color: var(--accent);
+    font-weight: 600;
+    background: var(--accent-soft);
+  }
+  .more-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .more-label {
+    font-size: 11px;
+    line-height: 1;
+  }
+  .more-enter-active,
+  .more-leave-active {
+    transition: transform 0.22s ease, opacity 0.22s ease;
+  }
+  .more-enter-from,
+  .more-leave-to {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.22s ease;
+  }
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
   }
 }
 </style>

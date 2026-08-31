@@ -184,9 +184,11 @@ function onInputBlur() {
 }
 
 function onOutsideClick(e: MouseEvent) {
-  const el = (e.target as HTMLElement).closest('.search-box')
-  if (!el) {
-    closeDropdown()
+  const t = e.target as HTMLElement
+  const el = t.closest('.search-box')
+  if (!el) closeDropdown()
+  if (filterOpen.value && !t.closest('.filter-drop')) {
+    filterOpen.value = false
   }
 }
 

@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { listItems, listItemCategories, type ItemListItem } from '../api'
 import { imageUrl } from '../types'
 import SafeImage from '../components/SafeImage.vue'
@@ -58,9 +58,20 @@ function setCategory(c: string) {
   load()
 }
 
+function onDocClick(e: MouseEvent) {
+  if (filterOpen.value && !(e.target as HTMLElement).closest('.filter-drop')) {
+    filterOpen.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+})
+
 onBeforeUnmount(() => {
   clearTimeout(timer)
   window.removeEventListener('scroll', onScroll)
+  document.removeEventListener('click', onDocClick)
 })
 
 listItemCategories().then((cs) => {
@@ -92,14 +103,20 @@ load()
       </div>
     </div>
 
-    <div class="filter-toggle" :class="{ 'filter-open': filterOpen }" @click="filterOpen = !filterOpen">
-      <span>筛选</span>
-      <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span>
-      <svg class="filter-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="m9 18 6-6-6-6" />
-      </svg>
-    </div>
-    <div class="filter-row" v-show="filterOpen || activeFilterCount > 0 || search">
+    <div class="filter-drop">
+      <div class="filter-toggle" :class="{ 'filter-open': filterOpen, 'has-filter': activeFilterCount > 0 }" @click="filterOpen = !filterOpen">
+        <template v-if="activeFilterCount > 0">
+          <span class="filter-chip">{{ categoryFilter }}</span>
+        </template>
+        <template v-else>
+          <span>筛选</span>
+        </template>
+        <svg class="filter-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      </div>
+      <transition name="drop">
+        <div class="filter-row" v-show="filterOpen">
       <button
         class="chip"
         :class="{ on: categoryFilter === '' }"
@@ -116,6 +133,8 @@ load()
       >
         {{ c.nameZh }}
       </button>
+    </div>
+    </transition>
     </div>
 
     <div v-if="loading && items.length === 0" class="grid">
@@ -201,9 +220,32 @@ load()
 .filter-toggle {
   display: none;
 }
+.filter-drop {
+  position: static;
+}
 @media (min-width: 641px) {
-  .filter-row {
+  .filter-drop .filter-row {
     display: flex !important;
+  }
+}
+@media (max-width: 640px) {
+  .filter-drop {
+    position: relative;
+  }
+  .filter-drop .filter-row {
+    box-sizing: border-box;
+    position: absolute;
+    top: calc(100% - -5px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    margin-bottom: 0;
+    padding: 12px;
+    gap: 8px;
+    background: var(--drop-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    box-shadow: var(--shadow-hover);
   }
 }
 .filter-row {
@@ -335,6 +377,20 @@ load()
   animation: spin 0.6s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+.drop-enter-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  transform-origin: top center;
+}
+.drop-leave-active {
+  transition: opacity 0.12s ease;
+}
+.drop-enter-from {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+.drop-leave-to {
+  opacity: 0;
+}
 @media (max-width: 640px) {
   .search-box {
     max-width: none;
@@ -353,18 +409,20 @@ load()
     font-weight: 600;
     color: var(--text-2);
   }
-  .filter-count {
-    background: var(--accent);
-    color: var(--on-accent);
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 700;
-    min-width: 18px;
-    height: 18px;
+  .filter-toggle.has-filter {
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .filter-chip {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    padding: 0 5px;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
   }
   .filter-chevron {
     margin-left: auto;

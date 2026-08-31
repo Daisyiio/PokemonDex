@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { listMoves, type MoveListItem } from '../api'
 import { CATEGORY_COLORS, TYPE_COLORS } from '../types'
 import TypeBadge from '../components/TypeBadge.vue'
@@ -70,9 +70,20 @@ function setCategory(c: string) {
 
 const filterOpen = ref(false)
 
+function onDocClick(e: MouseEvent) {
+  if (filterOpen.value && !(e.target as HTMLElement).closest('.filter-drop')) {
+    filterOpen.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+})
+
 onBeforeUnmount(() => {
   clearTimeout(timer)
   window.removeEventListener('scroll', onScroll)
+  document.removeEventListener('click', onDocClick)
 })
 
 load()
@@ -263,9 +274,31 @@ load()
 .filter-toggle {
   display: none;
 }
+.filter-drop {
+  position: static;
+}
 @media (min-width: 641px) {
   .filter-group {
     display: block !important;
+  }
+}
+@media (max-width: 640px) {
+  .filter-drop {
+    position: relative;
+  }
+  .filter-drop .filter-group {
+    box-sizing: border-box;
+    position: absolute;
+    top: calc(100% - -5px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    margin-bottom: 0;
+    padding: 12px;
+    background: var(--drop-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    box-shadow: var(--shadow-hover);
   }
 }
 .filter-row {
@@ -333,6 +366,20 @@ load()
   font-weight: 600;
   letter-spacing: 1px;
   margin-right: 2px;
+}
+.drop-enter-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  transform-origin: top center;
+}
+.drop-leave-active {
+  transition: opacity 0.12s ease;
+}
+.drop-enter-from {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+.drop-leave-to {
+  opacity: 0;
 }
 .type-text {
   line-height: 1;
