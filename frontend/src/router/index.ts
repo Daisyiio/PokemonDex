@@ -12,6 +12,7 @@ import TypeChartView from '../views/TypeChartView.vue'
 import EggGroupsView from '../views/EggGroupsView.vue'
 import BreedingSimView from '../views/BreedingSimView.vue'
 import GeneticsView from '../views/GeneticsView.vue'
+import BeadsView from '../views/BeadsView.vue'
 
 const scrollCache = new Map<string, { top: number }>()
 
@@ -89,6 +90,12 @@ const router = createRouter({
       name: 'genetics',
       component: GeneticsView,
       meta: { title: '蛋招式遗传规划', subtitle: '自动推导遗传路径' },
+    },
+    {
+      path: '/beads',
+      name: 'beads',
+      component: BeadsView,
+      meta: { title: '拼豆图纸', subtitle: '图片转拼豆色号图纸' },
     },
   ],
   scrollBehavior(to, _from, savedPosition) {

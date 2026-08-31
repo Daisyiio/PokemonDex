@@ -16,6 +16,7 @@ const navItems = [
   { to: '/egg-groups', icon: 'egg', label: '蛋组' },
   { to: '/genetics', icon: 'genetics', label: '遗传' },
   { to: '/type-chart', icon: 'types', label: '克制' },
+  { to: '/beads', icon: 'beads', label: '拼豆' },
 ]
 
 const DETAIL_ROUTES = ['pokemon-detail', 'move-detail', 'ability-detail', 'item-detail']
