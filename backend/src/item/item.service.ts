@@ -80,11 +80,18 @@ export class ItemService {
   }
 
   async categories() {
-    const categories = await this.prisma.item.findMany({
+    const rows = await this.prisma.item.findMany({
       where: { type: 'category' },
       select: { id: true, nameZh: true },
       orderBy: { id: 'asc' },
     });
+    const seen = new Set<string>();
+    const categories: { id: number; nameZh: string }[] = [];
+    for (const r of rows) {
+      if (seen.has(r.nameZh)) continue;
+      seen.add(r.nameZh);
+      categories.push(r);
+    }
     return categories;
   }
 }

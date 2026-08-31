@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { readdirSync, existsSync } from 'fs';
+import { join } from 'path';
 
 export interface PokemonListQuery {
   search?: string;
@@ -13,6 +15,92 @@ export interface PokemonListQuery {
 @Injectable()
 export class PokemonService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private static spritesCache: Record<string, any> | null = null;
+
+  spritesIndex(): Record<string, any> {
+    if (PokemonService.spritesCache) return PokemonService.spritesCache;
+
+    const imagesDir = join(__dirname, '..', '..', 'public', 'images');
+    const index: Record<string, any> = {};
+
+    const officialFiles = existsSync(join(imagesDir, 'official')) ? readdirSync(join(imagesDir, 'official')) : [];
+    const homeFiles = existsSync(join(imagesDir, 'home')) ? readdirSync(join(imagesDir, 'home')) : [];
+    const dreamFiles = existsSync(join(imagesDir, 'dream')) ? readdirSync(join(imagesDir, 'dream')) : [];
+    const pixelFiles = existsSync(join(imagesDir, 'pixel-assets', 'pokemon')) ? readdirSync(join(imagesDir, 'pixel-assets', 'pokemon')) : [];
+
+    const pixelByInt = new Map<number, string>();
+    for (const f of pixelFiles) {
+      const m = /^(\d+)\.png$/.exec(f);
+      if (m) pixelByInt.set(Number(m[1]), f);
+    }
+
+    const buildEntry = (id: string, intId: number, dreamEn?: string): any => {
+      const entry: any = {};
+
+      const pickPrefixed = (files: string[], preferPlain: boolean): string | null => {
+        const prefixed = files.filter((f) => /^\d{4}-/.test(f) && f.slice(0, 4) === id);
+        if (prefixed.length === 0) return null;
+        if (preferPlain) {
+          const nonShiny = prefixed.filter((f) => !f.includes('-shiny'));
+          const base = nonShiny.find(
+            (f) => !/-(雄性|雌性|超极巨化|超级|戴着|换装|搭档|初始|世界|Mega|Gigantamax)/i.test(f)
+          );
+          return base ?? nonShiny[0] ?? prefixed[0];
+        }
+        return prefixed[0];
+      };
+
+      const officialFile = pickPrefixed(officialFiles, true);
+      if (officialFile) entry.official = `/images/official/${encodeURIComponent(officialFile)}`;
+
+      const homeFile = pickPrefixed(homeFiles, true);
+      if (homeFile) entry.home = `/images/home/${encodeURIComponent(homeFile)}`;
+
+      const pixelFile = pixelByInt.get(intId);
+      if (pixelFile) entry.pixel = `/images/pixel-assets/pokemon/${pixelFile}`;
+
+      if (dreamEn) {
+        const norm = (s: string) => s.replace(/\s+/g, '_').toLowerCase();
+        const target = norm(dreamEn);
+        const candidates = dreamFiles.filter((f) => {
+          const m = /^\d+(.+)_Dream\.png$/.exec(f);
+          return m && norm(m[1]) === target;
+        });
+        if (candidates.length > 0) {
+          const base = candidates.find((f) => !/-/.test(f));
+          entry.dream = `/images/dream/${encodeURIComponent(base ?? candidates[0])}`;
+        }
+      }
+
+      return entry;
+    };
+
+    // dream 文件名形如 001Bulbasaur_Dream.png / 122Mr._Mime_Dream.png：从文件名提取 id → 英文名
+    const dreamEnById = new Map<number, string>();
+    for (const f of dreamFiles) {
+      const m = /^(\d+)(.+)_Dream\.png$/.exec(f);
+      if (m) {
+        const intId = Number(m[1]);
+        const existing = dreamEnById.get(intId);
+        // 优先保留基础形态名（不含 - 形态后缀）
+        if (!existing || (existing.includes('-') && !m[2].includes('-'))) {
+          dreamEnById.set(intId, m[2]);
+        }
+      }
+    }
+
+    // 覆盖到最大 id（official/home/dream/pixel 合并）
+    const maxId = Math.max(1025, ...pixelByInt.keys(), ...dreamEnById.keys(), 1025);
+    for (let i = 1; i <= maxId; i++) {
+      const id = String(i).padStart(4, '0');
+      const en = dreamEnById.get(i);
+      index[id] = buildEntry(id, i, en);
+    }
+
+    PokemonService.spritesCache = index;
+    return index;
+  }
 
   async list(query: PokemonListQuery) {
     const { search, type, gen, page = 1, pageSize = 24 } = query;

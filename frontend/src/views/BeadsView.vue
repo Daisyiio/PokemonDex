@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { listPokemon, type ListParams } from '../api'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { listPokemon, getPokemonSpritesIndex, type ListParams, type PokemonSprites } from '../api'
 import type { PokemonSummary } from '../types'
-import { MARD_PALETTE } from '../beads/mard-palette'
+import { imageUrl } from '../types'
+import { MARD_PALETTE, MARD_NO_MAP } from '../beads/mard-palette'
 import {
   buildGrid,
+  cropImageToContent,
   drawPattern,
   exportPNG,
   loadImageFromFile,
@@ -16,8 +18,14 @@ import { useScrollMemory } from '../composables/useScrollMemory'
 
 useScrollMemory()
 
+onMounted(loadSpritesIndex)
+
 const gridN = ref(32)
 const showLabels = ref(true)
+const showGuides = ref(true)
+const showOutline = ref(false)
+const outlineThickness = ref(1)
+const outlineColorNo = ref('H7')
 const dragging = ref(false)
 const errorMsg = ref('')
 
@@ -25,6 +33,7 @@ const sourceImg = ref<HTMLImageElement | null>(null)
 const sourceName = ref('')
 const grid = ref<BeadGrid | null>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
+const canvasWrapEl = ref<HTMLDivElement | null>(null)
 const previewVisible = ref(false)
 
 const totalBeads = computed(() => gridN.value * gridN.value)
@@ -33,6 +42,19 @@ const placedBeads = computed(() => {
   if (!g) return 0
   return g.cells.filter((c) => c.color).length
 })
+
+// ---- 豆子描边 ----
+const OUTLINE_COMMON: { no: string; label: string }[] = [
+  { no: 'H7', label: '黑' },
+  { no: 'H6', label: '深灰' },
+  { no: 'H5', label: '中灰' },
+  { no: 'F4', label: '红' },
+  { no: 'D8', label: '浅紫' },
+  { no: 'C8', label: '蓝' },
+  { no: 'M12', label: '深棕' },
+  { no: 'A7', label: '橙' },
+]
+const outlineColorObj = computed(() => MARD_NO_MAP[outlineColorNo.value])
 
 // ---- 本地上传 / 拖拽 / 粘贴 ----
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -77,13 +99,91 @@ function onPaste(e: ClipboardEvent) {
   }
 }
 
-// ---- 宝可梦像素素材 ----
+// ---- 宝可梦素材 ----
 const pokeSearch = ref('')
 const pokeResults = ref<PokemonSummary[]>([])
 const searching = ref(false)
 const selectedPoke = ref<PokemonSummary | null>(null)
 const pokeLoading = ref(false)
 let searchTimer: number | undefined
+
+type PokeSource = 'pixel' | 'official' | 'home' | 'dream'
+
+const pokeSources: { id: PokeSource; label: string }[] = [
+  { id: 'pixel', label: '像素图标' },
+  { id: 'official', label: '官方立绘' },
+  { id: 'home', label: 'Home 大图' },
+  { id: 'dream', label: '梦世界' },
+]
+const pokeSource = ref<PokeSource>('pixel')
+const POKE_SOURCE_NEEDS_CROP: Record<PokeSource, boolean> = {
+  pixel: true,
+  official: false,
+  home: false,
+  dream: false,
+}
+
+const spritesIndex = ref<Record<string, PokemonSprites>>({})
+
+async function loadSpritesIndex() {
+  if (Object.keys(spritesIndex.value).length) return
+  try {
+    spritesIndex.value = await getPokemonSpritesIndex()
+  } catch {
+    /* keep empty */
+  }
+}
+
+function pokeThumb(p: PokemonSummary, src: PokeSource): string {
+  const sprites = spritesIndex.value[p.id]
+  return sprites?.[src] || sprites?.official || imageUrl('official', p.image)
+}
+
+const thumbCache = reactive(new Map<string, string>())
+const thumbKey = (p: PokemonSummary, src: PokeSource) => `${src}:${p.id}`
+
+// 并发裁剪池：同一时间最多 3 个任务
+let cropQueue: (() => Promise<void>)[] = []
+let cropRunning = 0
+const CROP_CONCURRENCY = 3
+
+async function runCropQueue() {
+  while (cropRunning < CROP_CONCURRENCY && cropQueue.length) {
+    const task = cropQueue.shift()!
+    cropRunning++
+    try {
+      await task()
+    } catch {
+      /* ignore */
+    } finally {
+      cropRunning--
+      runCropQueue()
+    }
+  }
+}
+
+async function croppedThumb(p: PokemonSummary): Promise<void> {
+  const src = pokeSource.value
+  const key = thumbKey(p, src)
+  if (thumbCache.has(key) || !POKE_SOURCE_NEEDS_CROP[src]) return
+
+  const task = async () => {
+    try {
+      const img = await loadImageFromUrl(pokeThumb(p, src))
+      const cropped = cropImageToContent(img, 2)
+      if (cropped) thumbCache.set(key, cropped)
+    } catch {
+      /* keep original */
+    }
+  }
+  cropQueue.push(task)
+  runCropQueue()
+}
+
+function thumbSrc(p: PokemonSummary): string {
+  const src = pokeSource.value
+  return thumbCache.get(thumbKey(p, src)) ?? pokeThumb(p, src)
+}
 
 async function searchPoke() {
   searching.value = true
@@ -104,8 +204,10 @@ function onSearchInput() {
   searchTimer = window.setTimeout(searchPoke, 250)
 }
 
-function pokeThumb(p: PokemonSummary): string {
-  return `/images/pixel-assets/pokemon/${p.id}.png`
+function switchPokeSource(src: PokeSource) {
+  if (pokeSource.value === src) return
+  pokeSource.value = src
+  reObserveAllImgs()
 }
 
 async function selectPoke(p: PokemonSummary) {
@@ -113,7 +215,9 @@ async function selectPoke(p: PokemonSummary) {
   errorMsg.value = ''
   pokeLoading.value = true
   try {
-    sourceImg.value = await loadImageFromUrl(pokeThumb(p))
+    if (POKE_SOURCE_NEEDS_CROP[pokeSource.value]) await croppedThumb(p)
+    const src = thumbCache.get(thumbKey(p, pokeSource.value)) ?? pokeThumb(p, pokeSource.value)
+    sourceImg.value = await loadImageFromUrl(src)
     sourceName.value = `#${p.id} ${p.nameZh}`
     previewVisible.value = true
   } catch {
@@ -123,17 +227,81 @@ async function selectPoke(p: PokemonSummary) {
   }
 }
 
+// ---- 视口懒加载 ----
+let gridObserver: IntersectionObserver | null = null
+
+function getObserver(): IntersectionObserver {
+  if (gridObserver) return gridObserver
+  gridObserver = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          const target = e.target as HTMLElement
+          const id = target.dataset.pokeId
+          if (id) {
+            const p = pokeResults.value.find((x) => x.id === id)
+            if (p) croppedThumb(p)
+            gridObserver?.unobserve(e.target)
+          }
+        }
+      }
+    },
+    { rootMargin: '120px' }
+  )
+  return gridObserver
+}
+
+function observePokeImg(el: Element | null, p: PokemonSummary) {
+  const target = el as HTMLElement | null
+  if (!target || !POKE_SOURCE_NEEDS_CROP[pokeSource.value]) return
+  target.setAttribute('data-poke-id', p.id)
+  getObserver().observe(target)
+}
+
+function reObserveAllImgs() {
+  if (!POKE_SOURCE_NEEDS_CROP[pokeSource.value]) return
+  gridObserver?.disconnect()
+  gridObserver = null
+  // 断连后重新观察当前所有图片，视口内的会立即触发裁剪
+  pokeResults.value.forEach((p) => {
+    const el = document.querySelector(`[data-poke-id="${p.id}"]`)
+    if (el) getObserver().observe(el)
+  })
+}
+
+function resetGridObserver() {
+  gridObserver?.disconnect()
+  gridObserver = null
+}
+
 // ---- 生成图纸 ----
+const viewMode = ref<'fit' | 'actual'>('fit')
+
+function previewCell(): number {
+  const wrapW = canvasWrapEl.value?.clientWidth ?? 800
+  if (viewMode.value === 'actual') {
+    const isMobile = window.innerWidth <= 640
+    return isMobile ? 16 : 24
+  }
+  const avail = wrapW - 48
+  return Math.max(4, Math.floor(avail / gridN.value))
+}
+
 function renderGrid() {
   const img = sourceImg.value
   if (!img || !canvasEl.value) return
   try {
     const rgbGrid = sampleGrid(img, gridN.value)
-    grid.value = buildGrid(rgbGrid, gridN.value)
+    grid.value = buildGrid(rgbGrid, gridN.value, {
+      outline: showOutline.value,
+      outlineThickness: outlineThickness.value,
+      outlineColor: outlineColorObj.value,
+    })
     drawPattern(canvasEl.value, grid.value, {
-      cell: 24,
+      cell: previewCell(),
       labels: showLabels.value,
       withLegend: true,
+      guides: showGuides.value,
     })
   } catch {
     grid.value = null
@@ -141,7 +309,7 @@ function renderGrid() {
   }
 }
 
-watch([sourceImg, gridN, showLabels], renderGrid, { flush: 'post' })
+watch([sourceImg, gridN, showLabels, showGuides, showOutline, outlineThickness, outlineColorNo, viewMode], renderGrid, { flush: 'post' })
 
 // ---- 导出 ----
 function onExport() {
@@ -149,7 +317,12 @@ function onExport() {
   if (!g) return
   const canvas = document.createElement('canvas')
   const cell = gridN.value > 40 ? 16 : 28
-  drawPattern(canvas, g, { cell, labels: showLabels.value, withLegend: true })
+  drawPattern(canvas, g, {
+    cell,
+    labels: showLabels.value,
+    withLegend: true,
+    guides: showGuides.value,
+  })
   const name = sourceName.value.replace(/[\\/:*?"<>|]/g, '_') || 'beads'
   exportPNG(canvas, `拼豆图纸-${name}-${gridN.value}格.png`)
 }
@@ -158,9 +331,18 @@ function onExport() {
 onBeforeUnmount(() => {
   window.clearTimeout(searchTimer)
   window.removeEventListener('paste', onPaste)
+  window.removeEventListener('resize', onResize)
+  resetGridObserver()
 })
 
+let resizeTimer: number | undefined
+function onResize() {
+  window.clearTimeout(resizeTimer)
+  resizeTimer = window.setTimeout(renderGrid, 150)
+}
+
 window.addEventListener('paste', onPaste)
+window.addEventListener('resize', onResize)
 </script>
 
 <template>
@@ -200,7 +382,18 @@ window.addEventListener('paste', onPaste)
           </div>
 
           <div class="poke-block">
-            <div class="poke-label">或选择宝可梦像素素材</div>
+            <div class="poke-label">或选择宝可梦素材</div>
+            <div class="src-chips">
+              <button
+                v-for="s in pokeSources"
+                :key="s.id"
+                class="src-chip"
+                :class="{ on: pokeSource === s.id }"
+                @click="switchPokeSource(s.id)"
+              >
+                {{ s.label }}
+              </button>
+            </div>
             <input
               v-model="pokeSearch"
               class="poke-search"
@@ -217,7 +410,7 @@ window.addEventListener('paste', onPaste)
                 :class="{ on: selectedPoke?.id === p.id }"
                 @click="selectPoke(p)"
               >
-                <img :src="pokeThumb(p)" :alt="p.nameZh" loading="lazy" />
+                <img :ref="(el: unknown) => observePokeImg(el as Element | null, p)" :src="thumbSrc(p)" :alt="p.nameZh" loading="lazy" />
                 <span class="poke-id">#{{ p.id }}</span>
                 <span class="poke-name">{{ p.nameZh }}</span>
               </button>
@@ -251,6 +444,62 @@ window.addEventListener('paste', onPaste)
               <span class="switch-knob"></span>
             </button>
           </div>
+          <div class="param-row">
+            <span class="param-label">定位辅助线（每 5/10 格）</span>
+            <button
+              class="switch"
+              :class="{ on: showGuides }"
+              @click="showGuides = !showGuides"
+            >
+              <span class="switch-knob"></span>
+            </button>
+          </div>
+          <div class="param-row">
+            <span class="param-label">豆子描边</span>
+            <button
+              class="switch"
+              :class="{ on: showOutline }"
+              @click="showOutline = !showOutline"
+            >
+              <span class="switch-knob"></span>
+            </button>
+          </div>
+          <template v-if="showOutline">
+            <div class="param-row">
+              <span class="param-label">描边厚度</span>
+              <div class="thick-btns">
+                <button
+                  v-for="t in [1, 2, 3]"
+                  :key="t"
+                  class="thick-btn"
+                  :class="{ on: outlineThickness === t }"
+                  @click="outlineThickness = t"
+                >
+                  {{ t }} 圈
+                </button>
+              </div>
+            </div>
+            <div class="param-row">
+              <span class="param-label">描边颜色</span>
+              <select v-model="outlineColorNo" class="outline-select">
+                <optgroup label="常用">
+                  <option v-for="c in OUTLINE_COMMON" :key="c.no" :value="c.no">
+                    {{ c.no }} · {{ c.label }}
+                  </option>
+                </optgroup>
+                <optgroup label="全部 Mard 色">
+                  <option v-for="c in MARD_PALETTE" :key="c.no" :value="c.no">
+                    {{ c.no }} · {{ c.seriesName }}
+                  </option>
+                </optgroup>
+              </select>
+              <span
+                v-if="outlineColorObj"
+                class="outline-swatch"
+                :style="{ background: `rgb(${outlineColorObj.rgb[0]},${outlineColorObj.rgb[1]},${outlineColorObj.rgb[2]})` }"
+              ></span>
+            </div>
+          </template>
         </section>
 
         <button class="export-btn" :disabled="!grid" @click="onExport">
@@ -276,17 +525,27 @@ window.addEventListener('paste', onPaste)
                 <span class="stat-chip">已用 {{ placedBeads }} / {{ totalBeads }} 格</span>
                 <span v-if="grid" class="stat-chip">{{ grid.used.length }} 种颜色</span>
               </div>
+              <button class="view-toggle" @click="viewMode = viewMode === 'fit' ? 'actual' : 'fit'">
+                {{ viewMode === 'fit' ? '适应宽度' : '100% 原始大小' }}
+              </button>
             </div>
-            <div class="canvas-wrap">
-              <canvas ref="canvasEl" class="pattern-canvas"></canvas>
+            <div class="canvas-wrap" :class="{ actual: viewMode === 'actual' }">
+              <canvas ref="canvasEl" class="pattern-canvas" :class="{ actual: viewMode === 'actual' }"></canvas>
             </div>
             <p v-if="placedBeads < totalBeads" class="transparent-note">
-              透明区域已自动留空（共 {{ totalBeads - placedBeads }} 格），不会计入耗材。
+              透明/留空区域不耗珠（{{ totalBeads - placedBeads }} 格）· 实耗珠子 {{ placedBeads }} 颗
             </p>
           </section>
 
           <section v-if="grid && grid.used.length" class="panel legend-panel">
             <h2 class="panel-title">材料清单</h2>
+            <div class="legend-summary">
+              <span class="ls-item"><b>{{ placedBeads }}</b> 颗</span>
+              <span class="ls-sep">·</span>
+              <span class="ls-item"><b>{{ grid.used.length }}</b> 种颜色</span>
+              <span class="ls-sep">·</span>
+              <span class="ls-item">留空 {{ totalBeads - placedBeads }} 格</span>
+            </div>
             <div class="legend-list">
               <div v-for="c in grid.used" :key="c.no" class="legend-item">
                 <span class="legend-swatch" :style="{ background: `rgb(${c.rgb[0]},${c.rgb[1]},${c.rgb[2]})` }"></span>
@@ -341,6 +600,9 @@ window.addEventListener('paste', onPaste)
   grid-template-columns: 320px 1fr;
   gap: 16px;
   align-items: start;
+}
+.layout > * {
+  min-width: 0;
 }
 .panel {
   background: var(--surface);
@@ -399,7 +661,35 @@ window.addEventListener('paste', onPaste)
 .poke-label {
   font-size: 12px;
   color: var(--text-3);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+}
+.src-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.src-chip {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.src-chip:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+.src-chip.on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 .poke-search {
   width: 100%;
@@ -420,8 +710,8 @@ window.addEventListener('paste', onPaste)
 .poke-grid {
   margin-top: 8px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 8px;
   max-height: 220px;
   overflow-y: auto;
   opacity: 1;
@@ -436,7 +726,7 @@ window.addEventListener('paste', onPaste)
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 6px 2px;
+  padding: 8px 4px;
   border: 1px solid var(--border-faint);
   background: var(--surface-2);
   border-radius: 10px;
@@ -452,8 +742,8 @@ window.addEventListener('paste', onPaste)
   background: var(--accent-soft);
 }
 .poke-item img {
-  width: 30px;
-  height: 30px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
   image-rendering: pixelated;
 }
@@ -530,6 +820,49 @@ window.addEventListener('paste', onPaste)
 }
 .switch.on .switch-knob {
   left: 23px;
+}
+.thick-btns {
+  display: flex;
+  gap: 6px;
+}
+.thick-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.thick-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+.thick-btn.on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.outline-select {
+  min-width: 0;
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  border-radius: 9px;
+  font-size: 13px;
+  outline: none;
+}
+.outline-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-soft);
 }
 .export-btn {
   width: 100%;
@@ -609,12 +942,30 @@ window.addEventListener('paste', onPaste)
   border-radius: 999px;
   padding: 3px 10px;
 }
+.view-toggle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.view-toggle:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
 .canvas-wrap {
   overflow-x: auto;
   background: #ffffff;
   border: 1px solid var(--border-faint);
   border-radius: 12px;
   padding: 8px;
+}
+.canvas-wrap.actual {
+  overflow: auto;
 }
 .pattern-canvas {
   display: block;
@@ -623,10 +974,46 @@ window.addEventListener('paste', onPaste)
   height: auto;
   image-rendering: auto;
 }
+.pattern-canvas.actual {
+  max-width: none;
+}
+@media (max-width: 768px) {
+  .pattern-canvas {
+    margin: 0;
+  }
+}
+@media (max-width: 640px) {
+  .poke-grid {
+    max-height: 180px;
+  }
+  .page-head h1 {
+    font-size: 20px;
+  }
+}
 .transparent-note {
   font-size: 12px;
   color: var(--text-3);
   margin: 8px 2px 0;
+}
+.legend-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--text-2);
+  font-size: 13px;
+}
+.legend-summary b {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.ls-sep {
+  color: var(--border);
 }
 .legend-list {
   display: grid;

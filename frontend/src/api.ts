@@ -86,6 +86,17 @@ export function listPokemonIds(): Promise<PokemonNavItem[]> {
   return get<PokemonNavItem[]>(`${BASE}/pokemon/ids`)
 }
 
+export interface PokemonSprites {
+  official?: string | null
+  home?: string | null
+  dream?: string | null
+  pixel?: string | null
+}
+
+export function getPokemonSpritesIndex(): Promise<Record<string, PokemonSprites>> {
+  return get<Record<string, PokemonSprites>>(`${BASE}/pokemon/sprites`)
+}
+
 export interface EggGroupMember {
   id: string
   nameZh: string
