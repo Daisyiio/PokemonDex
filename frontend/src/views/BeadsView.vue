@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { listPokemon, getPokemonSpritesIndex, type ListParams, type PokemonSprites } from '../api'
 import type { PokemonSummary } from '../types'
 import { imageUrl } from '../types'
 import { MARD_PALETTE, MARD_NO_MAP } from '../beads/mard-palette'
 import {
   buildGrid,
+  createWorkingCanvas,
   cropImageToContent,
   drawPattern,
   exportPNG,
@@ -30,6 +31,7 @@ const dragging = ref(false)
 const errorMsg = ref('')
 
 const sourceImg = ref<HTMLImageElement | null>(null)
+const workImg = ref<HTMLCanvasElement | null>(null)
 const sourceName = ref('')
 const grid = ref<BeadGrid | null>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
@@ -63,6 +65,13 @@ function pickFile() {
   fileInput.value?.click()
 }
 
+function setSource(img: HTMLImageElement, name: string) {
+  sourceImg.value = img
+  workImg.value = createWorkingCanvas(img)
+  sourceName.value = name
+  previewVisible.value = true
+}
+
 async function handleFile(file: File | undefined | null) {
   if (!file) return
   if (!file.type.startsWith('image/')) {
@@ -71,9 +80,7 @@ async function handleFile(file: File | undefined | null) {
   }
   errorMsg.value = ''
   try {
-    sourceImg.value = await loadImageFromFile(file)
-    sourceName.value = file.name
-    previewVisible.value = true
+    setSource(await loadImageFromFile(file), file.name)
   } catch {
     errorMsg.value = '图片读取失败'
   }
@@ -112,7 +119,7 @@ type PokeSource = 'pixel' | 'official' | 'home' | 'dream'
 const pokeSources: { id: PokeSource; label: string }[] = [
   { id: 'pixel', label: '像素图标' },
   { id: 'official', label: '官方立绘' },
-  { id: 'home', label: 'Home 大图' },
+  { id: 'home', label: 'Home' },
   { id: 'dream', label: '梦世界' },
 ]
 const pokeSource = ref<PokeSource>('pixel')
@@ -217,9 +224,7 @@ async function selectPoke(p: PokemonSummary) {
   try {
     if (POKE_SOURCE_NEEDS_CROP[pokeSource.value]) await croppedThumb(p)
     const src = thumbCache.get(thumbKey(p, pokeSource.value)) ?? pokeThumb(p, pokeSource.value)
-    sourceImg.value = await loadImageFromUrl(src)
-    sourceName.value = `#${p.id} ${p.nameZh}`
-    previewVisible.value = true
+    setSource(await loadImageFromUrl(src), `#${p.id} ${p.nameZh}`)
   } catch {
     errorMsg.value = '像素素材加载失败'
   } finally {
@@ -288,7 +293,7 @@ function previewCell(): number {
 }
 
 function renderGrid() {
-  const img = sourceImg.value
+  const img = workImg.value ?? sourceImg.value
   if (!img || !canvasEl.value) return
   try {
     const rgbGrid = sampleGrid(img, gridN.value)
@@ -302,6 +307,8 @@ function renderGrid() {
       labels: showLabels.value,
       withLegend: true,
       guides: showGuides.value,
+      // 适应宽度时按 dpr 渲染，高分屏更锐利；100% 视图保持 1:1
+      scale: viewMode.value === 'actual' ? 1 : window.devicePixelRatio || 1,
     })
   } catch {
     grid.value = null
@@ -327,13 +334,167 @@ function onExport() {
   exportPNG(canvas, `拼豆图纸-${name}-${gridN.value}格.png`)
 }
 
+// ---- 点击放大预览（lightbox）----
+const lightboxOpen = ref(false)
+const lightboxZoom = ref(1)
+const lightboxEl = ref<HTMLCanvasElement | null>(null)
+const LIGHTBOX_MAX_ZOOM = 8
+
+function renderLightbox() {
+  const g = grid.value
+  if (!g || !lightboxEl.value) return
+  const cell = gridN.value > 40 ? 16 : 28
+  drawPattern(lightboxEl.value, g, {
+    cell,
+    labels: showLabels.value,
+    withLegend: true,
+    guides: showGuides.value,
+  })
+}
+
+function openLightbox() {
+  if (!grid.value) return
+  lensVisible.value = false
+  lightboxZoom.value = 1
+  lightboxOpen.value = true
+  nextTick(renderLightbox)
+}
+
+function closeLightbox() {
+  lightboxOpen.value = false
+}
+
+function zoomLightbox(delta: number) {
+  lightboxZoom.value = Math.min(
+    LIGHTBOX_MAX_ZOOM,
+    Math.max(1, Math.round(lightboxZoom.value * delta * 2) / 2)
+  )
+}
+
+// ---- 弹层拖拽平移 ----
+const lightboxStageEl = ref<HTMLDivElement | null>(null)
+const lbDragging = ref(false)
+let lbDragStartX = 0
+let lbDragStartY = 0
+let lbScrollStartX = 0
+let lbScrollStartY = 0
+
+function onStagePointerDown(e: PointerEvent) {
+  const stage = lightboxStageEl.value
+  if (!stage) return
+  lbDragging.value = true
+  lbDragStartX = e.clientX
+  lbDragStartY = e.clientY
+  lbScrollStartX = stage.scrollLeft
+  lbScrollStartY = stage.scrollTop
+  try {
+    stage.setPointerCapture(e.pointerId)
+  } catch {
+    /* ignore */
+  }
+}
+
+function onStagePointerMove(e: PointerEvent) {
+  if (!lbDragging.value) return
+  const stage = lightboxStageEl.value
+  if (!stage) return
+  stage.scrollLeft = lbScrollStartX - (e.clientX - lbDragStartX)
+  stage.scrollTop = lbScrollStartY - (e.clientY - lbDragStartY)
+}
+
+function onStagePointerUp() {
+  lbDragging.value = false
+}
+
+function resetLightboxView() {
+  lightboxZoom.value = 1
+}
+
+// 滚轮缩放（以光标为中心），拖拽负责平移
+function onStageWheel(e: WheelEvent) {
+  const stage = lightboxStageEl.value
+  if (!stage) return
+  e.preventDefault()
+  const oldZoom = lightboxZoom.value
+  let factor = Math.pow(2, -e.deltaY * 0.001)
+  factor = Math.min(2, Math.max(0.5, factor))
+  const newZoom = Math.min(LIGHTBOX_MAX_ZOOM, Math.max(1, oldZoom * factor))
+  if (newZoom === oldZoom) return
+  const rect = stage.getBoundingClientRect()
+  const px = e.clientX - rect.left
+  const py = e.clientY - rect.top
+  const ratio = newZoom / oldZoom
+  lightboxZoom.value = newZoom
+  nextTick(() => {
+    stage.scrollLeft = (stage.scrollLeft + px) * ratio - px
+    stage.scrollTop = (stage.scrollTop + py) * ratio - py
+  })
+}
+
+watch(
+  [grid, gridN, showLabels, showGuides, showOutline, outlineThickness, outlineColorNo],
+  () => {
+    if (lightboxOpen.value) renderLightbox()
+  }
+)
+
+// ---- 悬停放大镜 ----
+const lensVisible = ref(false)
+const lensStyle = ref({ left: '0px', top: '0px' })
+const lensEl = ref<HTMLCanvasElement | null>(null)
+const LENS_PX = 180
+const LENS_MAG = 3
+
+function onCanvasMove(e: MouseEvent) {
+  const canvas = canvasEl.value
+  const wrap = canvasWrapEl.value
+  if (!canvas || !wrap || !grid.value) return
+  const rect = canvas.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return
+  const srcX = ((e.clientX - rect.left) / rect.width) * canvas.width
+  const srcY = ((e.clientY - rect.top) / rect.height) * canvas.height
+
+  const wrapRect = wrap.getBoundingClientRect()
+  let left = e.clientX - wrapRect.left + 18
+  let top = e.clientY - wrapRect.top - LENS_PX / 2
+  const maxLeft = Math.max(0, wrapRect.width - LENS_PX - 8)
+  const maxTop = Math.max(0, wrapRect.height - LENS_PX - 8)
+  left = Math.max(4, Math.min(left, maxLeft))
+  top = Math.max(4, Math.min(top, maxTop))
+  lensStyle.value = { left: `${left}px`, top: `${top}px` }
+
+  const lens = lensEl.value
+  if (!lens) return
+  const ctx = lens.getContext('2d')
+  if (!ctx) return
+  const sw = Math.min(LENS_PX / LENS_MAG, canvas.width)
+  const sh = Math.min(LENS_PX / LENS_MAG, canvas.height)
+  const sx = Math.min(Math.max(0, srcX - sw / 2), canvas.width - sw)
+  const sy = Math.min(Math.max(0, srcY - sh / 2), canvas.height - sh)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, LENS_PX, LENS_PX)
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, LENS_PX, LENS_PX)
+  lensVisible.value = true
+}
+
+function hideLens() {
+  lensVisible.value = false
+}
+
 // ---- 键盘粘贴事件 ----
 onBeforeUnmount(() => {
   window.clearTimeout(searchTimer)
   window.removeEventListener('paste', onPaste)
   window.removeEventListener('resize', onResize)
+  window.removeEventListener('keydown', onKeydown)
   resetGridObserver()
 })
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && lightboxOpen.value) closeLightbox()
+}
+window.addEventListener('keydown', onKeydown)
 
 let resizeTimer: number | undefined
 function onResize() {
@@ -402,7 +563,7 @@ window.addEventListener('resize', onResize)
               @input="onSearchInput"
               @keyup.enter="searchPoke"
             />
-            <div class="poke-grid" :class="{ loading: pokeLoading }">
+            <div class="poke-grid" :class="{ loading: pokeLoading, pixel: pokeSource === 'pixel' }">
               <button
                 v-for="p in pokeResults"
                 :key="p.id"
@@ -430,8 +591,8 @@ window.addEventListener('resize', onResize)
             v-model.number="gridN"
             class="range"
             type="range"
-            min="10"
-            max="64"
+            min="8"
+            max="128"
             step="1"
           />
           <div class="param-row">
@@ -529,8 +690,11 @@ window.addEventListener('resize', onResize)
                 {{ viewMode === 'fit' ? '适应宽度' : '100% 原始大小' }}
               </button>
             </div>
-            <div class="canvas-wrap" :class="{ actual: viewMode === 'actual' }">
-              <canvas ref="canvasEl" class="pattern-canvas" :class="{ actual: viewMode === 'actual' }"></canvas>
+            <div class="canvas-wrap" :class="{ actual: viewMode === 'actual' }" @mousemove="onCanvasMove" @mouseleave="hideLens">
+              <canvas ref="canvasEl" class="pattern-canvas" :class="{ actual: viewMode === 'actual' }" @click="openLightbox"></canvas>
+              <div v-if="lensVisible" class="lens" :style="lensStyle">
+                <canvas ref="lensEl" width="180" height="180" class="lens-canvas"></canvas>
+              </div>
             </div>
             <p v-if="placedBeads < totalBeads" class="transparent-note">
               透明/留空区域不耗珠（{{ totalBeads - placedBeads }} 格）· 实耗珠子 {{ placedBeads }} 颗
@@ -569,6 +733,40 @@ window.addEventListener('resize', onResize)
             ></span>
           </div>
         </section>
+      </div>
+    </div>
+
+    <div v-if="lightboxOpen" class="lightbox-backdrop" @click.self="closeLightbox">
+      <div class="lightbox-modal">
+        <div class="lightbox-head">
+          <span class="lightbox-title">{{ sourceName }} · 放大预览</span>
+          <span class="lightbox-hint">滚轮缩放 · 拖拽平移</span>
+          <div class="lightbox-zoom">
+            <button class="lightbox-btn" :disabled="lightboxZoom <= 1" @click="zoomLightbox(0.5)">-</button>
+            <span class="lightbox-zoom-label">{{ lightboxZoom.toFixed(1) }}×</span>
+            <button class="lightbox-btn" :disabled="lightboxZoom >= LIGHTBOX_MAX_ZOOM" @click="zoomLightbox(2)">+</button>
+            <button class="lightbox-btn" @click="lightboxZoom = 1">重置</button>
+          </div>
+          <button class="lightbox-close" title="关闭" @click="closeLightbox">✕</button>
+        </div>
+        <div
+          ref="lightboxStageEl"
+          class="lightbox-stage"
+          :class="{ dragging: lbDragging }"
+          @pointerdown="onStagePointerDown"
+          @pointermove="onStagePointerMove"
+          @pointerup="onStagePointerUp"
+          @pointercancel="onStagePointerUp"
+          @wheel="onStageWheel"
+          @dblclick="resetLightboxView"
+        >
+          <canvas
+            ref="lightboxEl"
+            class="lightbox-canvas"
+            draggable="false"
+            :style="{ zoom: String(lightboxZoom), maxWidth: lightboxZoom > 1 ? 'none' : '100%' }"
+          ></canvas>
+        </div>
       </div>
     </div>
   </div>
@@ -745,6 +943,9 @@ window.addEventListener('resize', onResize)
   width: 48px;
   height: 48px;
   object-fit: contain;
+  image-rendering: auto;
+}
+.poke-grid.pixel .poke-item img {
   image-rendering: pixelated;
 }
 .poke-id {
@@ -958,6 +1159,7 @@ window.addEventListener('resize', onResize)
   border-color: var(--accent);
 }
 .canvas-wrap {
+  position: relative;
   overflow-x: auto;
   background: #ffffff;
   border: 1px solid var(--border-faint);
@@ -973,9 +1175,139 @@ window.addEventListener('resize', onResize)
   max-width: 100%;
   height: auto;
   image-rendering: auto;
+  cursor: zoom-in;
 }
 .pattern-canvas.actual {
   max-width: none;
+}
+.lens {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #ffffff;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.38);
+  background: #ffffff;
+  pointer-events: none;
+  z-index: 20;
+}
+.lens-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+.lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(10, 12, 18, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: lb-fade 0.15s ease;
+}
+@keyframes lb-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.lightbox-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: min(96vw, 1200px);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+.lightbox-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-faint);
+}
+.lightbox-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lightbox-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  margin-left: 8px;
+  user-select: none;
+}
+.lightbox-zoom {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lightbox-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.lightbox-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.lightbox-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.lightbox-btn:disabled:hover {
+  border-color: var(--border);
+  color: var(--text-2);
+}
+.lightbox-zoom-label {
+  font-size: 12px;
+  color: var(--text-3);
+  min-width: 34px;
+  text-align: center;
+}
+.lightbox-close {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.lightbox-close:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+.lightbox-stage {
+  overflow: hidden;
+  padding: 12px;
+  background: #fafafa;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.lightbox-stage.dragging {
+  cursor: grabbing;
+}
+.lightbox-canvas {
+  display: block;
+  margin: 0 auto;
 }
 @media (max-width: 768px) {
   .pattern-canvas {

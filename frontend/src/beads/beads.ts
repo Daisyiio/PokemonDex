@@ -24,6 +24,8 @@ export interface DrawOptions {
   labels: boolean
   withLegend: boolean
   guides?: boolean
+  /** 画布内部分辨率放大倍数（如 devicePixelRatio），逻辑坐标不变 */
+  scale?: number
 }
 
 const ALPHA_THRESHOLD = 128
@@ -108,12 +110,38 @@ export function cropImageToContent(
   return out.toDataURL('image/png')
 }
 
-export function sampleGrid(
+type SampleSource = HTMLImageElement | HTMLCanvasElement
+
+function sourceSize(img: SampleSource): [number, number] {
+  if (img instanceof HTMLImageElement) {
+    return [img.naturalWidth || img.width, img.naturalHeight || img.height]
+  }
+  return [img.width, img.height]
+}
+
+// 降采样一次成工作副本，滑杆拖动时不再整幅读像素
+export function createWorkingCanvas(
   img: HTMLImageElement,
+  maxSide = 1024
+): HTMLCanvasElement {
+  const [w, h] = sourceSize(img)
+  const scale = Math.min(1, maxSide / Math.max(w, h))
+  const cw = Math.max(1, Math.round(w * scale))
+  const ch = Math.max(1, Math.round(h * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = cw
+  canvas.height = ch
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('无法创建画布上下文')
+  ctx.drawImage(img, 0, 0, cw, ch)
+  return canvas
+}
+
+export function sampleGrid(
+  img: SampleSource,
   n: number
 ): (RGB | null)[] {
-  const w = img.naturalWidth || img.width
-  const h = img.naturalHeight || img.height
+  const [w, h] = sourceSize(img)
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
@@ -154,7 +182,7 @@ export function sampleGrid(
     }
   }
 
-  return cells.map((c) =>
+  const grid = cells.map((c) =>
     c
       ? {
           r: Math.round(c.rs / c.cnt),
@@ -163,6 +191,83 @@ export function sampleGrid(
         }
       : null
   )
+
+  // 填补图案内部的空白格（大网格下像素图 1px 缝隙/跳格会导致空洞切断内容物）
+  fillInteriorHoles(grid, n)
+  return grid
+}
+
+const ORTHO_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1],
+]
+const DIAG_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [-1, -1],
+  [1, -1],
+  [-1, 1],
+  [1, 1],
+]
+
+function fillInteriorHoles(grid: (RGB | null)[], n: number): void {
+  const idx = (x: number, y: number) => y * n + x
+  const inBounds = (x: number, y: number) => x >= 0 && x < n && y >= 0 && y < n
+
+  for (let iter = 0; iter < 3; iter++) {
+    const fills: { i: number; color: RGB }[] = []
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const i = idx(x, y)
+        if (grid[i]) continue
+
+        let orthoCnt = 0
+        let totalCnt = 0
+        let rs = 0
+        let gs = 0
+        let bs = 0
+        for (const [dx, dy] of ORTHO_OFFSETS) {
+          const nx = x + dx
+          const ny = y + dy
+          if (!inBounds(nx, ny)) continue
+          const nb = grid[idx(nx, ny)]
+          if (nb) {
+            orthoCnt++
+            totalCnt++
+            rs += nb.r
+            gs += nb.g
+            bs += nb.b
+          }
+        }
+        for (const [dx, dy] of DIAG_OFFSETS) {
+          const nx = x + dx
+          const ny = y + dy
+          if (!inBounds(nx, ny)) continue
+          const nb = grid[idx(nx, ny)]
+          if (nb) {
+            totalCnt++
+            rs += nb.r
+            gs += nb.g
+            bs += nb.b
+          }
+        }
+
+        // 正交邻居 ≥2 且周围有一定覆盖才判定为图案内部空洞（避免侵蚀外轮廓/背景）
+        if (orthoCnt >= 2 && totalCnt >= 4) {
+          fills.push({
+            i,
+            color: {
+              r: Math.round(rs / totalCnt),
+              g: Math.round(gs / totalCnt),
+              b: Math.round(bs / totalCnt),
+            },
+          })
+        }
+      }
+    }
+    if (fills.length === 0) break
+    for (const f of fills) grid[f.i] = f.color
+  }
 }
 
 export function nearestColor(rgb: RGB): MardColor {
@@ -176,6 +281,23 @@ export function nearestColor(rgb: RGB): MardColor {
     }
   }
   return best!
+}
+
+// RGB → 最接近色号的小型 LRU 缓存，网格量化高频命中同一批颜色
+const NEAREST_CACHE_MAX = 8192
+const nearestCache = new Map<number, MardColor>()
+
+function nearestColorCached(rgb: RGB): MardColor {
+  const key = (rgb.r << 16) | (rgb.g << 8) | rgb.b
+  const hit = nearestCache.get(key)
+  if (hit) return hit
+  const color = nearestColor(rgb)
+  if (nearestCache.size >= NEAREST_CACHE_MAX) {
+    const first = nearestCache.keys().next().value as number | undefined
+    if (first !== undefined) nearestCache.delete(first)
+  }
+  nearestCache.set(key, color)
+  return color
 }
 
 function colorDist(a: RGB, b: RGB): number {
@@ -210,7 +332,7 @@ export function buildGrid(
     const content: (MardColor | null)[] = new Array(n * n)
     for (let i = 0; i < n * n; i++) {
       const rgb = rgbGrid[i]
-      content[i] = rgb ? nearestColor(rgb) : null
+      content[i] = rgb ? nearestColorCached(rgb) : null
     }
 
     let colors = content
@@ -293,11 +415,15 @@ export function drawPattern(
   const legendRows = Math.ceil(legend.length / cols)
   const legendH = legend.length ? 28 + legendRows * 32 + 8 : 0
 
-  canvas.width = gridPx + pad * 2
-  canvas.height = headH + gridPx + pad * 2 + legendH + 14
+  const scale = opts.scale ?? 1
+  const logW = gridPx + pad * 2
+  const logH = headH + gridPx + pad * 2 + legendH + 14
+  canvas.width = Math.round(logW * scale)
+  canvas.height = Math.round(logH * scale)
+  if (scale !== 1) ctx.scale(scale, scale)
 
   ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillRect(0, 0, logW, logH)
 
   ctx.fillStyle = '#111111'
   ctx.font = '700 18px sans-serif'
@@ -305,7 +431,7 @@ export function drawPattern(
   ctx.textBaseline = 'middle'
   ctx.fillText(
     `拼豆图纸 · ${n}×${n} 格 · Mard 色号`,
-    canvas.width / 2,
+    logW / 2,
     22
   )
 
@@ -322,7 +448,7 @@ export function drawPattern(
     }
   }
 
-  if (opts.labels && cell >= 9) {
+  if (opts.labels) {
     ctx.font = `700 ${Math.round(cell * 0.52)}px sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
