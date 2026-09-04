@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Post, Body } from '@nestjs/common';
 import { BreedingService } from './breeding.service';
+import { BreedingPlanDto, BreedingSimulateDto } from '../dto';
 
 @Controller('breeding')
 export class BreedingController {
@@ -16,21 +17,12 @@ export class BreedingController {
   }
 
   @Post('plan')
-  plan(@Body() body: { targetId: string; moves?: string[] }) {
+  plan(@Body() body: BreedingPlanDto) {
     return this.breedingService.plan(body.targetId, body.moves || []);
   }
 
   @Post('simulate')
-  simulate(@Body() body: {
-    targetId: string;
-    moves?: string[];
-    motherId: string;
-    fatherId: string;
-    everstone?: boolean;
-    destinyKnot?: boolean;
-    motherNature?: string;
-    fatherNature?: string;
-  }) {
+  simulate(@Body() body: BreedingSimulateDto) {
     return this.breedingService.simulate(body);
   }
 }

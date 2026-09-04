@@ -34,7 +34,10 @@ export function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
     const img = new Image()
-    img.onload = () => resolve(img)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve(img)
+    }
     img.onerror = () => {
       URL.revokeObjectURL(url)
       reject(new Error('图片加载失败'))
@@ -150,49 +153,49 @@ export function sampleGrid(
   ctx.drawImage(img, 0, 0)
   const { data } = ctx.getImageData(0, 0, w, h)
 
-  const cells: {
-    rs: number
-    gs: number
-    bs: number
-    cnt: number
-  }[] = new Array(n * n).fill(null)
-
-  const stride = Math.max(1, Math.floor(Math.max(w, h) / (n * 4)))
-  for (let sy = 0; sy < h; sy += stride) {
-    const cy = Math.min(n - 1, Math.floor((sy / h) * n))
+  // 逐格取"格子中心"对应的源像素（最近邻）。
+  // 旧的按源像素归格在 n>图宽时会跳格漏采，产生大量空白；中心采样的每个格必有值。
+  // 缩小到每个格子覆盖 ≥2 源像素时做 2×2 平均，照片更平滑。
+  const avg = w / n >= 2 && h / n >= 2
+  const grid: (RGB | null)[] = new Array(n * n)
+  for (let cy = 0; cy < n; cy++) {
+    const sy = Math.min(h - 1, Math.floor(((cy + 0.5) / n) * h))
     const row = cy * n
-    for (let sx = 0; sx < w; sx += stride) {
-      const idx = (sy * w + sx) * 4
-      if (data[idx + 3] < ALPHA_THRESHOLD) continue
-      const cx = Math.min(n - 1, Math.floor((sx / w) * n))
-      const cell = cells[row + cx]
-      if (!cell) {
-        cells[row + cx] = {
-          rs: data[idx],
-          gs: data[idx + 1],
-          bs: data[idx + 2],
-          cnt: 1,
+    for (let cx = 0; cx < n; cx++) {
+      const sx = Math.min(w - 1, Math.floor(((cx + 0.5) / n) * w))
+      const i = (sy * w + sx) * 4
+      if (data[i + 3] < ALPHA_THRESHOLD) continue
+      if (!avg) {
+        grid[row + cx] = { r: data[i], g: data[i + 1], b: data[i + 2] }
+        continue
+      }
+      let rs = 0
+      let gs = 0
+      let bs = 0
+      let cnt = 0
+      for (let dy = 0; dy < 2; dy++) {
+        const yy = Math.min(h - 1, sy + dy)
+        for (let dx = 0; dx < 2; dx++) {
+          const xx = Math.min(w - 1, sx + dx)
+          const j = (yy * w + xx) * 4
+          if (data[j + 3] < ALPHA_THRESHOLD) continue
+          rs += data[j]
+          gs += data[j + 1]
+          bs += data[j + 2]
+          cnt++
         }
-      } else {
-        cell.rs += data[idx]
-        cell.gs += data[idx + 1]
-        cell.bs += data[idx + 2]
-        cell.cnt++
+      }
+      if (cnt) {
+        grid[row + cx] = {
+          r: Math.round(rs / cnt),
+          g: Math.round(gs / cnt),
+          b: Math.round(bs / cnt),
+        }
       }
     }
   }
 
-  const grid = cells.map((c) =>
-    c
-      ? {
-          r: Math.round(c.rs / c.cnt),
-          g: Math.round(c.gs / c.cnt),
-          b: Math.round(c.bs / c.cnt),
-        }
-      : null
-  )
-
-  // 填补图案内部的空白格（大网格下像素图 1px 缝隙/跳格会导致空洞切断内容物）
+  // 填补图案内部的空白格（如像素图肢体间的透明缝隙），保留外轮廓
   fillInteriorHoles(grid, n)
   return grid
 }

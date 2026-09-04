@@ -1,19 +1,20 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { MoveService } from './move.service';
+import { MoveListQueryDto } from '../dto';
 
 @Controller('moves')
 export class MoveController {
   constructor(private readonly moveService: MoveService) {}
 
   @Get()
-  list(
-    @Query('search') search?: string,
-    @Query('type') type?: string,
-    @Query('category') category?: string,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
-  ) {
-    return this.moveService.list(search, type, category, page, pageSize);
+  list(@Query() query: MoveListQueryDto) {
+    return this.moveService.list(
+      query.search,
+      query.type,
+      query.category,
+      query.page,
+      query.pageSize,
+    );
   }
 
   @Get(':id')

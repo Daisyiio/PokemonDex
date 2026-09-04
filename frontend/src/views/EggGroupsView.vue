@@ -2,8 +2,8 @@
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { listEggGroups, type EggGroup } from '../api'
-import { imageUrl, typeColor } from '../types'
-import SafeImage from '../components/SafeImage.vue'
+import ListError from '../components/ListError.vue'
+import PokeCard from '../components/PokeCard.vue'
 import { useScrollMemory } from '../composables/useScrollMemory'
 
 useScrollMemory()
@@ -11,13 +11,16 @@ useScrollMemory()
 const route = useRoute()
 const groups = ref<EggGroup[]>([])
 const loading = ref(true)
+const error = ref('')
 const openName = ref('')
 
 function toggle(name: string) {
   openName.value = openName.value === name ? '' : name
 }
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
+  error.value = ''
   try {
     groups.value = await listEggGroups()
     const q = typeof route.query.group === 'string' ? route.query.group : ''
@@ -29,10 +32,14 @@ onMounted(async () => {
           ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }, 60)
     }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '蛋组数据加载失败'
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 </script>
 
 <template>
@@ -49,6 +56,8 @@ onMounted(async () => {
     <div v-if="loading" class="eg-grid">
       <div v-for="i in 8" :key="i" class="sk-card"></div>
     </div>
+
+    <ListError v-else-if="error" :message="error" @retry="load" />
 
     <div v-else class="eg-list">
       <div
@@ -78,25 +87,16 @@ onMounted(async () => {
         <Transition name="eg">
           <div v-if="openName === g.name" class="eg-body">
             <div class="eg-members">
-              <router-link
+              <PokeCard
                 v-for="m in g.members"
                 :key="m.id"
+                :id="m.id"
+                :name-zh="m.nameZh"
+                :image="m.image"
+                :types="m.types"
+                size="sm"
                 :to="`/pokemon/${m.id}`"
-                class="mem"
-              >
-                <div
-                  class="mem-img"
-                  :style="{ background: `linear-gradient(160deg, ${typeColor(m.types[0] || '一般')}22, var(--surface-2))` }"
-                >
-                  <SafeImage
-                    v-if="m.image"
-                    :src="imageUrl('official', m.image)"
-                    :alt="m.nameZh"
-                  />
-                </div>
-                <div class="mem-id">#{{ m.id }}</div>
-                <div class="mem-name">{{ m.nameZh }}</div>
-              </router-link>
+              />
             </div>
           </div>
         </Transition>
@@ -188,49 +188,6 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   gap: 10px;
-}
-.mem {
-  text-decoration: none;
-  color: inherit;
-  background: var(--surface-2);
-  border: 1px solid var(--border-faint);
-  border-radius: 14px;
-  padding: 10px;
-  text-align: center;
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
-}
-.mem:hover {
-  transform: translateY(-2px);
-  border-color: var(--border);
-  box-shadow: var(--shadow-hover);
-}
-.mem-img {
-  height: 72px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-}
-.mem-img img {
-  max-width: 64px;
-  max-height: 64px;
-  transition: transform 0.18s;
-}
-.mem:hover .mem-img img {
-  transform: scale(1.08);
-}
-.mem-id {
-  margin-top: 6px;
-  font-size: 10px;
-  color: var(--text-faint);
-  font-weight: 600;
-}
-.mem-name {
-  font-size: 12px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .eg-enter-active {
   transition: opacity 0.18s ease, transform 0.18s ease;

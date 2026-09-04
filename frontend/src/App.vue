@@ -172,6 +172,8 @@ function goHeaderBack() {
       type="button"
       class="tab-item tab-more"
       :class="{ 'tab-on': moreActive }"
+      :aria-haspopup="'menu'"
+      :aria-expanded="moreOpen ? 'true' : 'false'"
       @click="toggleMore"
     >
       <NavIcon :name="moreOpen ? 'close' : 'more'" />
@@ -347,8 +349,8 @@ function goHeaderBack() {
     display: none;
   }
   .theme-btn {
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     flex-shrink: 0;
     margin-left: auto;
   }
@@ -357,8 +359,8 @@ function goHeaderBack() {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
     border: none;
     background: transparent;
     color: var(--accent);
@@ -443,8 +445,10 @@ function goHeaderBack() {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 3px;
-    padding: 5px 2px;
+    min-height: 44px;
+    padding: 6px 2px;
     text-decoration: none;
     color: var(--text-3);
     background: none;
@@ -458,7 +462,7 @@ function goHeaderBack() {
     transform: scale(0.9);
   }
   .tab-label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
     line-height: 1;
     letter-spacing: 0.2px;

@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ItemService } from './item.service';
+import { ItemListQueryDto } from '../dto';
 
 @Controller('items')
 export class ItemController {
@@ -11,13 +12,13 @@ export class ItemController {
   }
 
   @Get()
-  list(
-    @Query('search') search?: string,
-    @Query('category') category?: string,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
-  ) {
-    return this.itemService.list(search, category, page, pageSize);
+  list(@Query() query: ItemListQueryDto) {
+    return this.itemService.list(
+      query.search,
+      query.category,
+      query.page,
+      query.pageSize,
+    );
   }
 
   @Get(':id')

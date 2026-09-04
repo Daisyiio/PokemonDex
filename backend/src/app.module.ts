@@ -7,6 +7,7 @@ import { AbilityModule } from './ability/ability.module';
 import { ItemModule } from './item/item.module';
 import { BreedingModule } from './breeding/breeding.module';
 import { GeneticsModule } from './genetics/genetics.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { GeneticsModule } from './genetics/genetics.module';
     ItemModule,
     BreedingModule,
     GeneticsModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

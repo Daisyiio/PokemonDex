@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { json } from 'express';
@@ -11,6 +12,13 @@ async function bootstrap() {
   app.enableCors();
   app.setGlobalPrefix('api');
   app.use(json({ limit: '10mb' }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: false,
+    }),
+  );
 
   // 静态图片
   app.useStaticAssets(join(__dirname, '..', 'public', 'images'), {

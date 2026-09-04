@@ -3,59 +3,47 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { listItems, listItemCategories, type ItemListItem } from '../api'
 import { imageUrl } from '../types'
 import SafeImage from '../components/SafeImage.vue'
+import ListError from '../components/ListError.vue'
 import { useScrollMemory } from '../composables/useScrollMemory'
 import { useInfiniteScroll } from '../composables/useInfiniteScroll'
+import { usePagedList } from '../composables/usePagedList'
 
 useScrollMemory()
 
-const items = ref<ItemListItem[]>([])
-const categories = ref<{ id: number; nameZh: string }[]>([])
-const total = ref(0)
-const page = ref(1)
-const loading = ref(false)
-const hasMore = ref(true)
-const search = ref('')
+const searchQuery = ref('')
 const categoryFilter = ref('')
+
+const { items, total, page, hasMore, loading, error, load, reset, search } =
+  usePagedList<ItemListItem>({
+    loader: (p, ps) =>
+      listItems({
+        search: searchQuery.value || undefined,
+        category: categoryFilter.value || undefined,
+        page: p,
+        pageSize: ps,
+      }),
+    pageSize: 24,
+  })
+
+const categories = ref<{ id: number; nameZh: string }[]>([])
 const filterOpen = ref(false)
 const activeFilterCount = computed(() => (categoryFilter.value ? 1 : 0))
-let timer: number | undefined
 
-async function load(append = false) {
-  if (!append) loading.value = true
-  try {
-    const res = await listItems({
-      search: search.value || undefined,
-      category: categoryFilter.value || undefined,
-      page: page.value,
-      pageSize: 24,
-    })
-    items.value = append ? [...items.value, ...res.items] : res.items
-    total.value = res.total
-    hasMore.value = items.value.length < res.total
-  } finally {
-    loading.value = false
-  }
-}
-
-const { loadingMore, onScroll } = useInfiniteScroll(
-  async () => { page.value++; await load(true) },
+const { loadingMore: loadingMoreScroll, onScroll } = useInfiniteScroll(
+  async () => {
+    page.value++
+    await load(true)
+  },
   () => hasMore.value,
 )
 
 function onSearch() {
-  clearTimeout(timer)
-  timer = window.setTimeout(() => {
-    page.value = 1
-    hasMore.value = true
-    load()
-  }, 250)
+  search()
 }
 
 function setCategory(c: string) {
   categoryFilter.value = c === categoryFilter.value ? '' : c
-  page.value = 1
-  hasMore.value = true
-  load()
+  reset()
 }
 
 function onDocClick(e: MouseEvent) {
@@ -66,16 +54,14 @@ function onDocClick(e: MouseEvent) {
 
 onMounted(() => {
   document.addEventListener('click', onDocClick)
+  listItemCategories().then((cs) => {
+    categories.value = cs
+  })
 })
 
 onBeforeUnmount(() => {
-  clearTimeout(timer)
   window.removeEventListener('scroll', onScroll)
   document.removeEventListener('click', onDocClick)
-})
-
-listItemCategories().then((cs) => {
-  categories.value = cs
 })
 
 load()
@@ -91,7 +77,7 @@ load()
     <div class="toolbar">
       <div class="search-box">
         <input
-          v-model="search"
+          v-model="searchQuery"
           type="text"
           placeholder="搜索道具名称…"
           @input="onSearch"
@@ -120,7 +106,7 @@ load()
       <button
         class="chip"
         :class="{ on: categoryFilter === '' }"
-        @click="categoryFilter = ''; load()"
+        @click="setCategory('')"
       >
         全部
       </button>
@@ -140,6 +126,8 @@ load()
     <div v-if="loading && items.length === 0" class="grid">
       <div v-for="i in 12" :key="i" class="sk-card"></div>
     </div>
+
+    <ListError v-else-if="error" :message="error" @retry="reset" />
 
     <div v-else class="grid">
       <div v-for="it in items" :key="it.id" class="it-card">
@@ -161,7 +149,7 @@ load()
       </div>
     </div>
 
-    <div v-if="loadingMore" class="scroll-loading">
+    <div v-if="loadingMoreScroll" class="scroll-loading">
       <div class="scroll-spinner" />
       <span>加载中...</span>
     </div>

@@ -6,9 +6,12 @@ import { imageUrl, typeColor } from '../types'
 import { listState } from '../store'
 import { useScrollMemory } from '../composables/useScrollMemory'
 import { useInfiniteScroll } from '../composables/useInfiniteScroll'
+import { usePagedList } from '../composables/usePagedList'
 import TypeBadge from '../components/TypeBadge.vue'
 import SafeImage from '../components/SafeImage.vue'
+import ListError from '../components/ListError.vue'
 import CustomSelect from '../components/CustomSelect.vue'
+import PokeCard from '../components/PokeCard.vue'
 import type { PokemonSummary } from '../types'
 
 useScrollMemory()
@@ -16,12 +19,28 @@ useScrollMemory()
 const router = useRouter()
 
 const types = ref<{ name: string; count: number }[]>([])
-const items = ref<PokemonSummary[]>([])
-const total = ref(0)
-const pageSize = 24
-const loading = ref(false)
-const hasMore = ref(true)
 const viewMode = ref<'grid' | 'list'>('grid')
+
+const {
+  items,
+  total,
+  page,
+  hasMore,
+  loading,
+  error,
+  load,
+  reset,
+} = usePagedList<PokemonSummary>({
+  loader: (p, ps) =>
+    listPokemon({
+      search: listState.search || undefined,
+      type: listState.types.length ? listState.types.join(',') : undefined,
+      gen: listState.gen ? Number(listState.gen) : undefined,
+      page: p,
+      pageSize: ps,
+    }),
+  pageSize: 24,
+})
 
 // --- dropdown search ---
 const searchResults = ref<PokemonSummary[]>([])
@@ -35,6 +54,7 @@ const dropStyle = ref<{ top: string; left: string; width: string }>({
   width: '0px',
 })
 let debounceTimer: number | undefined
+let suggestSeq = 0
 
 const gens = Array.from({ length: 9 }, (_, i) => i + 1)
 const genOptions = [
@@ -42,33 +62,18 @@ const genOptions = [
   ...gens.map((g) => ({ value: String(g), label: `第 ${g} 世代` })),
 ]
 
-async function load(append = false) {
-  if (!append) loading.value = true
-  try {
-    const res = await listPokemon({
-      search: listState.search || undefined,
-      type: listState.types.length ? listState.types.join(',') : undefined,
-      gen: listState.gen ? Number(listState.gen) : undefined,
-      page: listState.page,
-      pageSize,
-    })
-    items.value = append ? [...items.value, ...res.items] : res.items
-    total.value = res.total
-    hasMore.value = items.value.length < res.total
-  } finally {
-    loading.value = false
-  }
-}
-
-const { loadingMore, onScroll } = useInfiniteScroll(
-  async () => { listState.page++; await load(true) },
+const { loadingMore: loadingMoreScroll, onScroll } = useInfiniteScroll(
+  async () => {
+    listState.page = page.value + 1
+    page.value++
+    await load(true)
+  },
   () => hasMore.value,
 )
 
 function applyFilters() {
   listState.page = 1
-  hasMore.value = true
-  load()
+  reset()
 }
 
 function toggleType(t: string) {
@@ -135,13 +140,23 @@ function closeDropdown() {
 async function runSuggest() {
   const kw = listState.search.trim()
   if (!kw) {
+    suggestSeq++
     searchResults.value = []
     closeDropdown()
     return
   }
-  const res = await listPokemon({ search: kw, pageSize: 8 })
-  searchResults.value = res.items
-  openDropdown()
+  const mySeq = ++suggestSeq
+  try {
+    const res = await listPokemon({ search: kw, pageSize: 8 })
+    if (mySeq !== suggestSeq) return
+    searchResults.value = res.items
+    openDropdown()
+  } catch {
+    if (mySeq === suggestSeq) {
+      searchResults.value = []
+      closeDropdown()
+    }
+  }
 }
 
 function onSearchInput() {
@@ -196,7 +211,11 @@ watch(() => [listState.types, listState.gen], applyFilters)
 
 onMounted(async () => {
   load()
-  types.value = await listTypes()
+  try {
+    types.value = await listTypes()
+  } catch {
+    /* 属性筛选失败不阻塞主列表 */
+  }
   document.addEventListener('click', onOutsideClick)
 })
 
@@ -359,34 +378,27 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <ListError v-else-if="error" :message="error" @retry="reset" />
+
     <div v-else-if="viewMode === 'grid'" class="grid">
-      <router-link
+      <PokeCard
         v-for="p in items"
         :key="p.id"
+        :id="p.id"
+        :name-zh="p.nameZh"
+        :image="p.image"
+        :types="p.types"
         :to="`/pokemon/${p.id}`"
-        class="card"
       >
-        <div
-          class="card-img"
-          :style="{ background: `linear-gradient(160deg, ${typeColor(p.types[0] || '一般')}26, var(--surface-2))` }"
-        >
-          <SafeImage
-            v-if="p.image"
-            :src="imageUrl('official', p.image)"
-            :alt="p.nameZh"
-          />
-        </div>
-        <div class="card-id">#{{ p.id }}</div>
-        <div class="card-name">{{ p.nameZh }}</div>
-        <div class="card-gen" v-if="p.gen">第 {{ p.gen }} 世代</div>
+        <div v-if="p.gen" class="card-gen">第 {{ p.gen }} 世代</div>
         <div class="card-types">
           <TypeBadge v-for="t in p.types" :key="t" :type="t" size="sm" />
         </div>
-      </router-link>
+      </PokeCard>
     </div>
 
     <!-- 列表视图 -->
-    <div v-else class="list">
+    <div v-else-if="!error" class="list">
       <router-link
         v-for="p in items"
         :key="p.id"
@@ -416,7 +428,7 @@ onBeforeUnmount(() => {
       </router-link>
     </div>
 
-    <div v-if="loadingMore" class="scroll-loading">
+    <div v-if="loadingMoreScroll" class="scroll-loading">
       <div class="scroll-spinner" />
       <span>加载中...</span>
     </div>

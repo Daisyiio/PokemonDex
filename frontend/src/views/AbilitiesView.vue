@@ -3,49 +3,37 @@ import { onBeforeUnmount, ref } from 'vue'
 import { listAbilities, type AbilityInfo } from '../api'
 import { useScrollMemory } from '../composables/useScrollMemory'
 import { useInfiniteScroll } from '../composables/useInfiniteScroll'
+import { usePagedList } from '../composables/usePagedList'
+import ListError from '../components/ListError.vue'
 
 useScrollMemory()
 
-const items = ref<AbilityInfo[]>([])
-const total = ref(0)
-const page = ref(1)
-const loading = ref(false)
-const hasMore = ref(true)
-const search = ref('')
-let timer: number | undefined
+const searchQuery = ref('')
 
-async function load(append = false) {
-  if (!append) loading.value = true
-  try {
-    const res = await listAbilities({
-      search: search.value || undefined,
-      page: page.value,
-      pageSize: 24,
-    })
-    items.value = append ? [...items.value, ...res.items] : res.items
-    total.value = res.total
-    hasMore.value = items.value.length < res.total
-  } finally {
-    loading.value = false
-  }
-}
+const { items, total, page, hasMore, loading, error, load, reset, search } =
+  usePagedList<AbilityInfo>({
+    loader: (p, ps) =>
+      listAbilities({
+        search: searchQuery.value || undefined,
+        page: p,
+        pageSize: ps,
+      }),
+    pageSize: 24,
+  })
 
-const { loadingMore, onScroll } = useInfiniteScroll(
-  async () => { page.value++; await load(true) },
+const { loadingMore: loadingMoreScroll, onScroll } = useInfiniteScroll(
+  async () => {
+    page.value++
+    await load(true)
+  },
   () => hasMore.value,
 )
 
 function onSearch() {
-  clearTimeout(timer)
-  timer = window.setTimeout(() => {
-    page.value = 1
-    hasMore.value = true
-    load()
-  }, 250)
+  search()
 }
 
 onBeforeUnmount(() => {
-  clearTimeout(timer)
   window.removeEventListener('scroll', onScroll)
 })
 
@@ -62,7 +50,7 @@ load()
     <div class="toolbar">
       <div class="search-box">
         <input
-          v-model="search"
+          v-model="searchQuery"
           type="text"
           placeholder="搜索特性名称…"
           @input="onSearch"
@@ -77,6 +65,8 @@ load()
     <div v-if="loading && items.length === 0" class="grid">
       <div v-for="i in 12" :key="i" class="sk-card"></div>
     </div>
+
+    <ListError v-else-if="error" :message="error" @retry="reset" />
 
     <div v-else class="grid">
       <router-link
@@ -103,7 +93,7 @@ load()
       </router-link>
     </div>
 
-    <div v-if="loadingMore" class="scroll-loading">
+    <div v-if="loadingMoreScroll" class="scroll-loading">
       <div class="scroll-spinner" />
       <span>加载中...</span>
     </div>

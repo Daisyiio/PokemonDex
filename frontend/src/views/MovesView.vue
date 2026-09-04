@@ -6,66 +6,51 @@ import TypeBadge from '../components/TypeBadge.vue'
 import CategoryBadge from '../components/CategoryBadge.vue'
 import { useScrollMemory } from '../composables/useScrollMemory'
 import { useInfiniteScroll } from '../composables/useInfiniteScroll'
+import { usePagedList } from '../composables/usePagedList'
+import ListError from '../components/ListError.vue'
 
 useScrollMemory()
 
-const items = ref<MoveListItem[]>([])
-const total = ref(0)
-const page = ref(1)
-const loading = ref(false)
-const hasMore = ref(true)
-const search = ref('')
+const searchQuery = ref('')
 const typeFilter = ref('')
 const categoryFilter = ref('')
 
+const { items, total, page, hasMore, loading, error, load, reset, search } =
+  usePagedList<MoveListItem>({
+    loader: (p, ps) =>
+      listMoves({
+        search: searchQuery.value || undefined,
+        type: typeFilter.value || undefined,
+        category: categoryFilter.value || undefined,
+        page: p,
+        pageSize: ps,
+      }),
+    pageSize: 24,
+  })
+
 const types = Object.keys(TYPE_COLORS)
 const categories = ['物理', '特殊', '变化']
-let timer: number | undefined
 
-async function load(append = false) {
-  if (!append) loading.value = true
-  try {
-    const res = await listMoves({
-      search: search.value || undefined,
-      type: typeFilter.value || undefined,
-      category: categoryFilter.value || undefined,
-      page: page.value,
-      pageSize: 24,
-    })
-    items.value = append ? [...items.value, ...res.items] : res.items
-    total.value = res.total
-    hasMore.value = items.value.length < res.total
-  } finally {
-    loading.value = false
-  }
-}
-
-const { loadingMore, onScroll } = useInfiniteScroll(
-  async () => { page.value++; await load(true) },
+const { loadingMore: loadingMoreScroll, onScroll } = useInfiniteScroll(
+  async () => {
+    page.value++
+    await load(true)
+  },
   () => hasMore.value,
 )
 
 function onSearch() {
-  clearTimeout(timer)
-  timer = window.setTimeout(() => {
-    page.value = 1
-    hasMore.value = true
-    load()
-  }, 250)
+  search()
 }
 
 function setType(t: string) {
   typeFilter.value = t === typeFilter.value ? '' : t
-  page.value = 1
-  hasMore.value = true
-  load()
+  reset()
 }
 
 function setCategory(c: string) {
   categoryFilter.value = c === categoryFilter.value ? '' : c
-  page.value = 1
-  hasMore.value = true
-  load()
+  reset()
 }
 
 const filterOpen = ref(false)
@@ -81,7 +66,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  clearTimeout(timer)
   window.removeEventListener('scroll', onScroll)
   document.removeEventListener('click', onDocClick)
 })
@@ -99,7 +83,7 @@ load()
     <div class="toolbar">
       <div class="search-box">
         <input
-          v-model="search"
+          v-model="searchQuery"
           type="text"
           placeholder="搜索招式名称…"
           @input="onSearch"
@@ -176,6 +160,8 @@ load()
       <div v-for="i in 12" :key="i" class="sk-card"></div>
     </div>
 
+    <ListError v-else-if="error" :message="error" @retry="reset" />
+
     <div v-else class="grid">
       <router-link
         v-for="m in items"
@@ -215,7 +201,7 @@ load()
       </router-link>
     </div>
 
-    <div v-if="loadingMore" class="scroll-loading">
+    <div v-if="loadingMoreScroll" class="scroll-loading">
       <div class="scroll-spinner" />
       <span>加载中...</span>
     </div>

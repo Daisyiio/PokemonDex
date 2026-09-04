@@ -255,6 +255,23 @@ img {
   .page-enter-from {
     transform: none;
   }
+  .skeleton,
+  .skeleton::after,
+  .sk-card::after,
+  .sk-section,
+  .shimmer {
+    animation: none !important;
+  }
+  .scroll-spinner {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 @media (max-width: 768px) {
