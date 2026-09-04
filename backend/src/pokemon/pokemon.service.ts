@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { readdirSync, existsSync } from 'fs';
 import { join } from 'path';
+import { registerCacheResetter } from '../cache-guard';
 
 export interface PokemonListQuery {
   search?: string;
@@ -17,6 +18,16 @@ export class PokemonService {
   constructor(private readonly prisma: PrismaService) {}
 
   private static spritesCache: Record<string, any> | null = null;
+  private static typesCache: { name: string; count: number }[] | null = null;
+  private static idsCache: { id: string; nameZh: string }[] | null = null;
+  private static eggGroupsCache: any = null;
+
+  static resetCaches(): void {
+    PokemonService.spritesCache = null;
+    PokemonService.typesCache = null;
+    PokemonService.idsCache = null;
+    PokemonService.eggGroupsCache = null;
+  }
 
   spritesIndex(): Record<string, any> {
     if (PokemonService.spritesCache) return PokemonService.spritesCache;
@@ -154,6 +165,7 @@ export class PokemonService {
   }
 
   async types() {
+    if (PokemonService.typesCache) return PokemonService.typesCache;
     const all = await this.prisma.pokemon.findMany({ select: { types: true } });
     const map = new Map<string, number>();
     for (const p of all) {
@@ -161,19 +173,23 @@ export class PokemonService {
         map.set(t, (map.get(t) || 0) + 1);
       }
     }
-    return Array.from(map.entries())
+    PokemonService.typesCache = Array.from(map.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
+    return PokemonService.typesCache;
   }
 
   async ids() {
-    return this.prisma.pokemon.findMany({
+    if (PokemonService.idsCache) return PokemonService.idsCache;
+    PokemonService.idsCache = await this.prisma.pokemon.findMany({
       orderBy: { id: 'asc' },
       select: { id: true, nameZh: true },
     });
+    return PokemonService.idsCache;
   }
 
   async eggGroups() {
+    if (PokemonService.eggGroupsCache) return PokemonService.eggGroupsCache;
     const all = await this.prisma.pokemon.findMany({
       select: { id: true, nameZh: true, nameEn: true, image: true, types: true, detail: true },
     });
@@ -202,9 +218,10 @@ export class PokemonService {
         g.members.push(member);
       }
     }
-    return Array.from(groups.values())
+    PokemonService.eggGroupsCache = Array.from(groups.values())
       .map((g) => ({ name: g.name, count: g.members.length, members: g.members }))
       .sort((a, b) => b.count - a.count);
+    return PokemonService.eggGroupsCache;
   }
 
   private normalizeEggGroup(raw: string): string {
@@ -252,3 +269,5 @@ export class PokemonService {
     }
   }
 }
+
+registerCacheResetter('pokemon', () => PokemonService.resetCaches());

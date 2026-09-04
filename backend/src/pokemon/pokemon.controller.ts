@@ -1,19 +1,14 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { PokemonService } from './pokemon.service';
+import { PokemonListQueryDto } from '../dto';
 
 @Controller('pokemon')
 export class PokemonController {
   constructor(private readonly pokemonService: PokemonService) {}
 
   @Get()
-  list(
-    @Query('search') search?: string,
-    @Query('type') type?: string,
-    @Query('gen') gen?: number,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
-  ) {
-    return this.pokemonService.list({ search, type, gen, page, pageSize });
+  list(@Query() query: PokemonListQueryDto) {
+    return this.pokemonService.list(query);
   }
 
   @Get('types')

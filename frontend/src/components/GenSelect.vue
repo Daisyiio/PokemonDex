@@ -82,7 +82,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="wrapEl" class="gs-wrap" :class="{ compact }">
-    <button type="button" class="gs-select" @click.stop="toggle">
+    <button type="button" class="gs-select" :aria-haspopup="'listbox'" :aria-expanded="open ? 'true' : 'false'" @click.stop="toggle">
       <span class="gs-label">{{ label }}</span>
       <svg
         class="gs-chevron"
@@ -101,13 +101,15 @@ onBeforeUnmount(() => {
       </svg>
     </button>
     <Transition name="gsDrop">
-      <div v-if="open" class="gs-panel" :style="panelStyle">
+      <div v-if="open" class="gs-panel" :style="panelStyle" role="listbox">
         <button
           v-for="o in options"
           :key="o.value"
           type="button"
           class="gs-opt"
           :class="{ on: o.value === modelValue }"
+          role="option"
+          :aria-selected="o.value === modelValue ? 'true' : 'false'"
           @click="pick(o.value)"
         >
           <span>{{ o.label }}</span>

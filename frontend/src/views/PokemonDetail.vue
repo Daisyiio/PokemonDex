@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, onActivated, ref, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
-import { getPokemon, listPokemonIds, listAbilities, getMovesByGen, getPokemonEncounters, type PokemonNavItem, type MovesByGenResponse, type EncounterEntry } from '../api'
+import { getPokemon, listPokemon, listPokemonIds, listAbilities, getMovesByGen, getPokemonEncounters, type PokemonNavItem, type MovesByGenResponse, type EncounterEntry } from '../api'
 import { imageUrl, typeColor } from '../types'
 import TypeBadge from '../components/TypeBadge.vue'
 import CategoryBadge from '../components/CategoryBadge.vue'
 import SafeImage from '../components/SafeImage.vue'
 import ShapeIcon from '../components/ShapeIcon.vue'
+import StatsRadar from '../components/StatsRadar.vue'
 import type {
   PokemonDetail,
+  PokemonSummary,
   Form,
   MoveEntry,
   EvolutionNode,
@@ -89,21 +91,45 @@ const statColors: Record<string, string> = {
   speed: '#fa92b2',
 }
 
+// 能力名 → { 描述, id } 模块级缓存，避免反复请求
+const abilityMetaCache = new Map<string, { description?: string; id?: string }>()
+const abilityMetaPending = new Map<string, Promise<{ description?: string; id?: string } | null>>()
+
+async function fetchAbilityMeta(name: string): Promise<{ description?: string; id?: string } | null> {
+  const hit = abilityMetaCache.get(name)
+  if (hit) return hit
+  const pending = abilityMetaPending.get(name)
+  if (pending) return pending
+  const p = (async () => {
+    try {
+      const res = await listAbilities({ search: name })
+      const m = res.items.find((a) => a.nameZh === name) || res.items[0]
+      const meta = m ? { description: m.description ?? undefined, id: m.id } : null
+      if (meta) abilityMetaCache.set(name, meta)
+      return meta
+    } catch {
+      return null
+    } finally {
+      abilityMetaPending.delete(name)
+    }
+  })()
+  abilityMetaPending.set(name, p)
+  return p
+}
+
+const REGION_BY_SUFFIX: Record<string, string> = { G: '伽勒尔', H: '洗翠', A: '阿罗拉' }
+
 async function loadAbilities(names: string[]) {
   const map: Record<string, string> = {}
   const mapId: Record<string, string> = {}
-  await Promise.all(
-    names.map(async (name) => {
-      try {
-        const res = await listAbilities({ search: name })
-        const hit = res.items.find((a) => a.nameZh === name) || res.items[0]
-        if (hit?.description) map[name] = hit.description
-        if (hit?.id) mapId[name] = hit.id
-      } catch {
-        /* ignore */
-      }
-    })
-  )
+  const formIdx = activeForm.value
+  const metas = await Promise.all(names.map((n) => fetchAbilityMeta(n)))
+  if (formIdx !== activeForm.value) return
+  names.forEach((name, i) => {
+    const meta = metas[i]
+    if (meta?.description) map[name] = meta.description
+    if (meta?.id) mapId[name] = meta.id
+  })
   abilityMap.value = map
   abilityIdMap.value = mapId
 }
@@ -120,8 +146,7 @@ async function load() {
     // 根据地区后缀自动切换形态
     const suffix = d._meta?.formSuffix
     if (suffix) {
-      const regionMap: Record<string, string> = { G: '伽勒尔', H: '洗翠', A: '阿罗拉' }
-      const regionName = regionMap[suffix]
+      const regionName = REGION_BY_SUFFIX[suffix]
       if (regionName) {
         const idx = d.forms.findIndex((f) => f.name.includes(regionName))
         if (idx >= 0) activeForm.value = idx
@@ -136,7 +161,11 @@ async function load() {
 }
 
 onMounted(async () => {
-  navList.value = await listPokemonIds()
+  try {
+    navList.value = await listPokemonIds()
+  } catch {
+    /* 列表导航非关键，失败时隐藏上/下只按钮 */
+  }
   document.addEventListener('click', onGenDocClick)
 })
 
@@ -185,7 +214,7 @@ function matchFormEntry<T extends { form: string; types?: string[]; data?: unkno
   return byTypes || list[0]
 }
 
-const REGION_PREFIXES = ['阿罗拉', '伽勒尔', '洗翠']
+const REGION_PREFIXES = Object.values(REGION_BY_SUFFIX)
 
 const previewImg = ref<string | null>(null)
 const galleryTab = ref<'normal' | 'shiny'>('normal')
@@ -271,7 +300,7 @@ const MOVE_KEYS = {
   egg: 'egg_moves',
 } as const
 
-const activeMoves = (): MoveEntry[] => {
+const activeMoves = computed<MoveEntry[]>(() => {
   if (!detail.value) return []
   if (activeTab.value === 'tutor' && moveGen.value === 9) return []
   if (activeTab.value === 'tutor') return (genMovesData.value?.tutor?.map((m) => ({ name: m.name, level: '', machine: '', type: m.type, category: m.category || '—', power: m.power || '—', accuracy: m.accuracy || '—', pp: m.pp || '—' })) || []) as MoveEntry[]
@@ -285,7 +314,7 @@ const activeMoves = (): MoveEntry[] => {
   const data = detail.value[MOVE_KEYS[activeTab.value]] as { form: string; data: MoveEntry[] }[]
   const list = matchFormEntry(data, form())
   return (list || data[0] || { data: [] }).data
-}
+})
 
 async function loadMovesByGen(gen: number) {
   if (!detail.value || gen === 9) { genMovesData.value = null; return }
@@ -425,6 +454,87 @@ function methodClass(method: string): string {
   if (method.includes('定点') || method.includes('可见')) return 'overworld'
   return ''
 }
+
+// ---- 对比功能 ----
+const compareOpen = ref(false)
+const compareSearch = ref('')
+const compareResults = ref<PokemonSummary[]>([])
+const compareLoading = ref(false)
+const compareError = ref('')
+const compareA = ref<PokemonDetail | null>(null)
+const compareB = ref<PokemonDetail | null>(null)
+let compareTimer: number | undefined
+let compareSeq = 0
+
+const compareStatsLabels = ['HP', '攻击', '防御', '特攻', '特防', '速度']
+
+function compareStatsData(d: PokemonDetail): number[] {
+  const data = d.stats[0]?.data
+  if (!data) return []
+  return ['hp', 'attack', 'defense', 'sp_attack', 'sp_defense', 'speed'].map((k) =>
+    Number(data[k] ?? 0)
+  )
+}
+
+function openCompare() {
+  compareOpen.value = true
+  compareA.value = detail.value
+  compareB.value = null
+  compareSearch.value = ''
+  compareResults.value = []
+  compareError.value = ''
+}
+
+function closeCompare() {
+  compareOpen.value = false
+  window.clearTimeout(compareTimer)
+}
+
+function onCompareInput() {
+  window.clearTimeout(compareTimer)
+  compareTimer = window.setTimeout(runCompareSearch, 250)
+}
+
+async function runCompareSearch() {
+  const kw = compareSearch.value.trim()
+  if (!kw) {
+    compareResults.value = []
+    return
+  }
+  const mySeq = ++compareSeq
+  compareLoading.value = true
+  try {
+    const res = await listPokemon({ search: kw, pageSize: 12 })
+    if (mySeq !== compareSeq) return
+    compareResults.value = res.items
+  } catch {
+    if (mySeq === compareSeq) compareResults.value = []
+  } finally {
+    if (mySeq === compareSeq) compareLoading.value = false
+  }
+}
+
+async function pickCompare(id: string) {
+  if (id === detail.value?._meta.id) {
+    compareError.value = '不能与自身对比'
+    return
+  }
+  compareLoading.value = true
+  compareError.value = ''
+  try {
+    compareB.value = await getPokemon(id)
+  } catch {
+    compareError.value = '加载对比对象失败'
+  } finally {
+    compareLoading.value = false
+  }
+}
+
+function compareFormImg(d: PokemonDetail): string {
+  const img = d.forms[0]?.image
+  return img ? imageUrl('official', img) : ''
+}
+
 </script>
 
 <template>
@@ -443,6 +553,9 @@ function methodClass(method: string): string {
         <div class="hero-id">No. {{ detail.pokedex_id }}</div>
         <h1>{{ detail.name_zh }}</h1>
         <div class="names">{{ detail.name_ja }} · {{ detail.name_en }}</div>
+        <div class="hero-compare">
+          <button type="button" class="compare-btn" @click="openCompare">对比</button>
+        </div>
         <div class="types">
           <TypeBadge v-for="t in form()?.types" :key="t" :type="t" size="lg" />
         </div>
@@ -765,7 +878,7 @@ function methodClass(method: string): string {
             </tr>
           </thead>
           <tbody>
-            <template v-for="m in activeMoves()" :key="m.name + m.level + m.machine">
+            <template v-for="m in activeMoves" :key="m.name + m.level + m.machine">
               <tr>
                 <td class="num">
                   <template v-if="activeTab === 'egg' && m.parents && m.parents.length">
@@ -819,7 +932,7 @@ function methodClass(method: string): string {
                 </td>
               </tr>
             </template>
-            <tr v-if="activeMoves().length === 0">
+            <tr v-if="activeMoves.length === 0">
               <td colspan="7" class="empty">暂无数据</td>
             </tr>
           </tbody>
@@ -928,6 +1041,119 @@ function methodClass(method: string): string {
     </div>
     <div class="skeleton sk-section" />
     <div class="skeleton sk-section" style="height: 200px" />
+  </div>
+
+  <div v-if="compareOpen" class="compare-backdrop" @click.self="closeCompare">
+    <div class="compare-modal" role="dialog" aria-modal="true" aria-label="宝可梦对比">
+      <div class="compare-head">
+        <span class="compare-title">对比宝可梦</span>
+        <button type="button" class="compare-close" aria-label="关闭" @click="closeCompare">✕</button>
+      </div>
+      <div class="compare-body">
+        <div class="compare-search">
+          <input
+            v-model="compareSearch"
+            type="text"
+            placeholder="搜索第二只宝可梦（编号 / 名称 / 英文名）…"
+            @input="onCompareInput"
+          />
+          <div v-if="compareResults.length" class="compare-results">
+            <button
+              v-for="p in compareResults"
+              :key="p.id"
+              type="button"
+              class="compare-result"
+              @click="pickCompare(p.id)"
+            >
+              <span class="cr-img">
+                <SafeImage v-if="p.image" :src="imageUrl('official', p.image)" :alt="p.nameZh" />
+              </span>
+              <span class="cr-id">#{{ p.id }}</span>
+              <span class="cr-name">{{ p.nameZh }}</span>
+            </button>
+          </div>
+          <p v-if="compareError" class="compare-error">{{ compareError }}</p>
+          <p v-if="compareLoading && !compareB" class="compare-hint">加载中…</p>
+          <p v-if="!compareB && !compareLoading && !compareError" class="compare-hint">
+            输入关键字选择要对比的宝可梦
+          </p>
+        </div>
+
+        <div v-if="compareA && compareB" class="compare-grid">
+          <div class="cmp-col">
+            <div
+              class="cmp-img"
+              :style="{ background: `linear-gradient(160deg, ${typeColor(compareA.forms[0]?.types[0] || '一般')}22, var(--surface-2))` }"
+            >
+              <SafeImage v-if="compareFormImg(compareA)" :src="compareFormImg(compareA)" :alt="compareA.name_zh" />
+            </div>
+            <div class="cmp-name">#{{ compareA.pokedex_id }} {{ compareA.name_zh }}</div>
+            <div class="cmp-types">
+              <TypeBadge v-for="t in compareA.forms[0]?.types" :key="t" :type="t" size="sm" />
+            </div>
+            <div class="cmp-section-title">种族值（基础形态）</div>
+            <StatsRadar
+              v-if="compareStatsData(compareA).length"
+              :labels="compareStatsLabels"
+              :values="compareStatsData(compareA)"
+              class="cmp-radar"
+            />
+            <div class="cmp-stats">
+              <div v-for="(v, i) in compareStatsData(compareA)" :key="i" class="cmp-stat">
+                <span class="cmp-stat-label">{{ compareStatsLabels[i] }}</span>
+                <b class="cmp-stat-val">{{ v }}</b>
+              </div>
+            </div>
+            <div class="cmp-section-title">能力</div>
+            <div class="cmp-abilities">
+              <span v-for="a in compareA.forms[0]?.abilities" :key="a.name" class="cmp-ability">
+                {{ a.name }}<template v-if="a.is_hidden">（隐藏）</template>
+              </span>
+            </div>
+            <div class="cmp-section-title">身高 / 体重</div>
+            <div class="cmp-meta">
+              <span>{{ compareA.forms[0]?.height }} · {{ compareA.forms[0]?.weight }}</span>
+            </div>
+          </div>
+
+          <div class="cmp-col">
+            <div
+              class="cmp-img"
+              :style="{ background: `linear-gradient(160deg, ${typeColor(compareB.forms[0]?.types[0] || '一般')}22, var(--surface-2))` }"
+            >
+              <SafeImage v-if="compareFormImg(compareB)" :src="compareFormImg(compareB)" :alt="compareB.name_zh" />
+            </div>
+            <div class="cmp-name">#{{ compareB.pokedex_id }} {{ compareB.name_zh }}</div>
+            <div class="cmp-types">
+              <TypeBadge v-for="t in compareB.forms[0]?.types" :key="t" :type="t" size="sm" />
+            </div>
+            <div class="cmp-section-title">种族值（基础形态）</div>
+            <StatsRadar
+              v-if="compareStatsData(compareB).length"
+              :labels="compareStatsLabels"
+              :values="compareStatsData(compareB)"
+              class="cmp-radar"
+            />
+            <div class="cmp-stats">
+              <div v-for="(v, i) in compareStatsData(compareB)" :key="i" class="cmp-stat">
+                <span class="cmp-stat-label">{{ compareStatsLabels[i] }}</span>
+                <b class="cmp-stat-val">{{ v }}</b>
+              </div>
+            </div>
+            <div class="cmp-section-title">能力</div>
+            <div class="cmp-abilities">
+              <span v-for="a in compareB.forms[0]?.abilities" :key="a.name" class="cmp-ability">
+                {{ a.name }}<template v-if="a.is_hidden">（隐藏）</template>
+              </span>
+            </div>
+            <div class="cmp-section-title">身高 / 体重</div>
+            <div class="cmp-meta">
+              <span>{{ compareB.forms[0]?.height }} · {{ compareB.forms[0]?.weight }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -2203,5 +2429,228 @@ function methodClass(method: string): string {
   max-width: 85vw;
   max-height: 85vh;
   object-fit: contain;
+}
+.hero-compare {
+  margin-top: 8px;
+}
+.compare-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.compare-btn:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.compare-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: var(--overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.compare-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: min(96vw, 880px);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+.compare-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-faint);
+}
+.compare-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.compare-close {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.compare-close:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+.compare-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+.compare-search input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.compare-search input:focus {
+  border-color: var(--text-faint);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.compare-results {
+  margin-top: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--drop-bg);
+}
+.compare-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+.compare-result:hover {
+  background: var(--drop-hover);
+}
+.cr-img {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-3);
+  border-radius: 8px;
+}
+.cr-img img {
+  max-width: 28px;
+  max-height: 28px;
+}
+.cr-id {
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 600;
+}
+.compare-error {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 13px;
+}
+.compare-hint {
+  margin-top: 8px;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 16px;
+}
+.cmp-col {
+  background: var(--surface-2);
+  border: 1px solid var(--border-faint);
+  border-radius: 14px;
+  padding: 14px;
+  text-align: center;
+}
+.cmp-img {
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+.cmp-img img {
+  max-width: 120px;
+  max-height: 120px;
+}
+.cmp-name {
+  font-size: 15px;
+  font-weight: 700;
+  margin-top: 10px;
+  color: var(--text);
+}
+.cmp-types {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.cmp-section-title {
+  margin-top: 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+}
+.cmp-radar {
+  margin: 8px auto 0;
+  transform-origin: top center;
+}
+.cmp-stats {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+}
+.cmp-stat {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.cmp-stat-label {
+  color: var(--text-3);
+}
+.cmp-stat-val {
+  margin-left: 2px;
+}
+.cmp-abilities {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.cmp-ability {
+  word-break: break-all;
+}
+.cmp-meta {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+@media (max-width: 640px) {
+  .compare-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -6,14 +6,20 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "set \"ESLINT_USE_FLAT_CONFIG=false\" && eslint \"src/**/*.{ts,vue}\" --max-warnings 0",
+    "lint:fix": "set \"ESLINT_USE_FLAT_CONFIG=false\" && eslint \"src/**/*.{ts,vue}\" --fix"
   },
   "dependencies": {
     "vue": "^3.5.12",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
+    "@typescript-eslint/parser": "^5.62.0",
     "@vitejs/plugin-vue": "^5.1.4",
+    "eslint": "^8.57.1",
+    "eslint-plugin-vue": "^9.33.0",
     "typescript": "~5.6.2",
     "vite": "^5.4.10",
     "vue-tsc": "^2.1.8"

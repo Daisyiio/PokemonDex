@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
 import { listPokemon, getPokemonSpritesIndex, type ListParams, type PokemonSprites } from '../api'
 import type { PokemonSummary } from '../types'
 import { imageUrl } from '../types'
@@ -63,6 +63,13 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 function pickFile() {
   fileInput.value?.click()
+}
+
+function onDropZoneKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    pickFile()
+  }
 }
 
 function setSource(img: HTMLImageElement, name: string) {
@@ -147,7 +154,17 @@ function pokeThumb(p: PokemonSummary, src: PokeSource): string {
 }
 
 const thumbCache = reactive(new Map<string, string>())
+const THUMB_CACHE_MAX = 200
 const thumbKey = (p: PokemonSummary, src: PokeSource) => `${src}:${p.id}`
+
+function cacheThumb(key: string, dataUrl: string) {
+  if (thumbCache.has(key)) thumbCache.delete(key)
+  thumbCache.set(key, dataUrl)
+  if (thumbCache.size > THUMB_CACHE_MAX) {
+    const oldest = thumbCache.keys().next().value
+    if (oldest !== undefined) thumbCache.delete(oldest)
+  }
+}
 
 // 并发裁剪池：同一时间最多 3 个任务
 let cropQueue: (() => Promise<void>)[] = []
@@ -178,7 +195,7 @@ async function croppedThumb(p: PokemonSummary): Promise<void> {
     try {
       const img = await loadImageFromUrl(pokeThumb(p, src))
       const cropped = cropImageToContent(img, 2)
-      if (cropped) thumbCache.set(key, cropped)
+      if (cropped) cacheThumb(key, cropped)
     } catch {
       /* keep original */
     }
@@ -192,17 +209,21 @@ function thumbSrc(p: PokemonSummary): string {
   return thumbCache.get(thumbKey(p, src)) ?? pokeThumb(p, src)
 }
 
+let searchSeq = 0
+
 async function searchPoke() {
   searching.value = true
   const params: ListParams = { pageSize: 60 }
   if (pokeSearch.value.trim()) params.search = pokeSearch.value.trim()
+  const mySeq = ++searchSeq
   try {
     const res = await listPokemon(params)
+    if (mySeq !== searchSeq) return
     pokeResults.value = res.items
   } catch {
-    pokeResults.value = []
+    if (mySeq === searchSeq) pokeResults.value = []
   } finally {
-    searching.value = false
+    if (mySeq === searchSeq) searching.value = false
   }
 }
 
@@ -316,7 +337,18 @@ function renderGrid() {
   }
 }
 
-watch([sourceImg, gridN, showLabels, showGuides, showOutline, outlineThickness, outlineColorNo, viewMode], renderGrid, { flush: 'post' })
+let renderRaf = 0
+
+// 拖动滑杆等高频变化时按 rAF 合并重绘
+function scheduleRender() {
+  if (renderRaf) return
+  renderRaf = requestAnimationFrame(() => {
+    renderRaf = 0
+    renderGrid()
+  })
+}
+
+watch([sourceImg, gridN, showLabels, showGuides, showOutline, outlineThickness, outlineColorNo, viewMode], scheduleRender, { flush: 'post' })
 
 // ---- 导出 ----
 function onExport() {
@@ -445,14 +477,35 @@ const lensEl = ref<HTMLCanvasElement | null>(null)
 const LENS_PX = 180
 const LENS_MAG = 3
 
+let lensRaf = 0
+let lensSrcX = 0
+let lensSrcY = 0
+
+function drawLens() {
+  lensRaf = 0
+  const canvas = canvasEl.value
+  const lens = lensEl.value
+  if (!canvas || !lens) return
+  const ctx = lens.getContext('2d')
+  if (!ctx) return
+  const sw = Math.min(LENS_PX / LENS_MAG, canvas.width)
+  const sh = Math.min(LENS_PX / LENS_MAG, canvas.height)
+  const sx = Math.min(Math.max(0, lensSrcX - sw / 2), canvas.width - sw)
+  const sy = Math.min(Math.max(0, lensSrcY - sh / 2), canvas.height - sh)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, LENS_PX, LENS_PX)
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, LENS_PX, LENS_PX)
+}
+
 function onCanvasMove(e: MouseEvent) {
   const canvas = canvasEl.value
   const wrap = canvasWrapEl.value
   if (!canvas || !wrap || !grid.value) return
   const rect = canvas.getBoundingClientRect()
   if (rect.width === 0 || rect.height === 0) return
-  const srcX = ((e.clientX - rect.left) / rect.width) * canvas.width
-  const srcY = ((e.clientY - rect.top) / rect.height) * canvas.height
+  lensSrcX = ((e.clientX - rect.left) / rect.width) * canvas.width
+  lensSrcY = ((e.clientY - rect.top) / rect.height) * canvas.height
 
   const wrapRect = wrap.getBoundingClientRect()
   let left = e.clientX - wrapRect.left + 18
@@ -462,20 +515,11 @@ function onCanvasMove(e: MouseEvent) {
   left = Math.max(4, Math.min(left, maxLeft))
   top = Math.max(4, Math.min(top, maxTop))
   lensStyle.value = { left: `${left}px`, top: `${top}px` }
-
-  const lens = lensEl.value
-  if (!lens) return
-  const ctx = lens.getContext('2d')
-  if (!ctx) return
-  const sw = Math.min(LENS_PX / LENS_MAG, canvas.width)
-  const sh = Math.min(LENS_PX / LENS_MAG, canvas.height)
-  const sx = Math.min(Math.max(0, srcX - sw / 2), canvas.width - sw)
-  const sy = Math.min(Math.max(0, srcY - sh / 2), canvas.height - sh)
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, LENS_PX, LENS_PX)
-  ctx.imageSmoothingEnabled = false
-  ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, LENS_PX, LENS_PX)
   lensVisible.value = true
+
+  if (!lensRaf) {
+    lensRaf = requestAnimationFrame(drawLens)
+  }
 }
 
 function hideLens() {
@@ -483,27 +527,44 @@ function hideLens() {
 }
 
 // ---- 键盘粘贴事件 ----
-onBeforeUnmount(() => {
-  window.clearTimeout(searchTimer)
-  window.removeEventListener('paste', onPaste)
-  window.removeEventListener('resize', onResize)
-  window.removeEventListener('keydown', onKeydown)
-  resetGridObserver()
-})
-
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && lightboxOpen.value) closeLightbox()
 }
-window.addEventListener('keydown', onKeydown)
 
 let resizeTimer: number | undefined
 function onResize() {
   window.clearTimeout(resizeTimer)
-  resizeTimer = window.setTimeout(renderGrid, 150)
+  resizeTimer = window.setTimeout(scheduleRender, 150)
 }
 
-window.addEventListener('paste', onPaste)
-window.addEventListener('resize', onResize)
+onActivated(() => {
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('paste', onPaste)
+  window.addEventListener('resize', onResize)
+})
+
+onDeactivated(() => {
+  window.clearTimeout(searchTimer)
+  window.clearTimeout(resizeTimer)
+  if (renderRaf) cancelAnimationFrame(renderRaf)
+  if (lensRaf) cancelAnimationFrame(lensRaf)
+  renderRaf = 0
+  lensRaf = 0
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('paste', onPaste)
+  window.removeEventListener('resize', onResize)
+})
+
+onBeforeUnmount(() => {
+  window.clearTimeout(searchTimer)
+  window.clearTimeout(resizeTimer)
+  if (renderRaf) cancelAnimationFrame(renderRaf)
+  if (lensRaf) cancelAnimationFrame(lensRaf)
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('paste', onPaste)
+  window.removeEventListener('resize', onResize)
+  resetGridObserver()
+})
 </script>
 
 <template>
@@ -521,11 +582,13 @@ window.addEventListener('resize', onResize)
           <div
             class="drop-zone"
             :class="{ on: dragging }"
+            role="button"
+            tabindex="0"
             @click="pickFile"
+            @keydown="onDropZoneKeydown"
             @dragover.prevent="dragging = true"
             @dragleave="dragging = false"
             @drop.prevent="onDrop"
-            tabindex="0"
           >
             <svg class="dz-icon" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 16V4M7 9l5-5 5 5" />
@@ -736,7 +799,7 @@ window.addEventListener('resize', onResize)
       </div>
     </div>
 
-    <div v-if="lightboxOpen" class="lightbox-backdrop" @click.self="closeLightbox">
+    <div v-if="lightboxOpen" class="lightbox-backdrop" role="dialog" aria-modal="true" aria-label="拼豆图纸放大预览" @click.self="closeLightbox">
       <div class="lightbox-modal">
         <div class="lightbox-head">
           <span class="lightbox-title">{{ sourceName }} · 放大预览</span>

@@ -17,6 +17,7 @@ import {
   type BreedingResult,
 } from '../types'
 import SafeImage from '../components/SafeImage.vue'
+import PokeCard from '../components/PokeCard.vue'
 
 const NATURES = [
   '勤奋', '坦率', '害羞', '认真', '浮躁',
@@ -202,19 +203,17 @@ onMounted(async () => {
         <div v-for="i in 12" :key="i" class="sk-card"></div>
       </div>
       <div v-if="!targetId && !loading" class="grid">
-        <button
+        <PokeCard
           v-for="s in targetOptions"
           :key="s.id"
-          class="card"
+          :id="s.id"
+          :name-zh="s.nameZh"
+          :image="s.image"
+          :types="s.types"
           @click="pickTarget(s.id)"
         >
-          <div class="card-img" :style="{ background: `linear-gradient(160deg, ${typeColor(s.types[0] || '一般')}22, var(--surface-2))` }">
-            <SafeImage v-if="s.image" :src="imageUrl('official', s.image)" :alt="s.nameZh" />
-          </div>
-          <div class="card-id">#{{ s.id }}</div>
-          <div class="card-name">{{ s.nameZh }}</div>
           <div class="card-eg">{{ s.eggGroups.join(' / ') }}</div>
-        </button>
+        </PokeCard>
       </div>
 
       <div v-if="targetId" class="moves-panel">

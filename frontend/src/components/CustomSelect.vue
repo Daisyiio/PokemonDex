@@ -101,6 +101,8 @@ onBeforeUnmount(() => {
       type="button"
       class="sel-btn"
       :class="{ open }"
+      :aria-haspopup="'listbox'"
+      :aria-expanded="open ? 'true' : 'false'"
       @click="toggle"
       @keydown="onKeydown"
     >
@@ -123,13 +125,16 @@ onBeforeUnmount(() => {
       </svg>
     </button>
     <Transition name="sel">
-      <div v-if="open" class="sel-menu" :style="menuStyle">
+      <div v-if="open" class="sel-menu" :style="menuStyle" role="listbox" :aria-activedescendant="activeIndex >= 0 ? `sel-opt-${activeIndex}` : undefined">
         <button
           v-for="(o, i) in options"
           :key="o.value"
+          :id="`sel-opt-${i}`"
           type="button"
           class="sel-opt"
           :class="{ on: o.value === modelValue, active: i === activeIndex }"
+          role="option"
+          :aria-selected="o.value === modelValue ? 'true' : 'false'"
           :style="{ animationDelay: `${i * 24}ms` }"
           @click="pick(o.value)"
           @mouseenter="activeIndex = i"

@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { registerCacheResetter } from '../cache-guard';
 
 export interface SpeciesInfo {
   id: string;
@@ -77,6 +78,16 @@ export class BreedingService {
   private static eggMovesCache: Map<string, Map<string, EggMoveDef>> | null = null;
   private static eggMoveParentsCache: Map<string, Set<string>> | null = null;
   private static detailCache: Map<string, any> | null = null;
+
+  static resetCaches(): void {
+    BreedingService.orderCache = null;
+    BreedingService.byIdCache = null;
+    BreedingService.nameZhToId = null;
+    BreedingService.selfMovesCache = null;
+    BreedingService.eggMovesCache = null;
+    BreedingService.eggMoveParentsCache = null;
+    BreedingService.detailCache = null;
+  }
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -506,3 +517,5 @@ export class BreedingService {
     };
   }
 }
+
+registerCacheResetter('breeding', () => BreedingService.resetCaches());

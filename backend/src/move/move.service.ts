@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { Move, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { registerCacheResetter } from '../cache-guard';
 
 const FULL_WIDTH = '０１２３４５６７８９';
 
@@ -31,11 +32,24 @@ function sortMachines(a: string, b: string): number {
   return at - bt || an - bn;
 }
 
+// 与旧 SQL 的 ORDER BY 一致：纯数字 id 排前，z- 前缀排后，均按数值比较
+function moveRank(id: string): [number, number] {
+  const z = id.startsWith('z-') ? 1 : 0;
+  const digits = id.replace(/^z-/, '').match(/^\d+/)?.[0];
+  return [z, digits ? Number(digits) : 0];
+}
+
 @Injectable()
 export class MoveService {
   constructor(private readonly prisma: PrismaService) {}
 
   private static machinesCache: Map<string, string[]> | null = null;
+  private static learnersCache: Map<string, MoveLearner[]> | null = null;
+
+  static resetCaches(): void {
+    MoveService.machinesCache = null;
+    MoveService.learnersCache = null;
+  }
 
   private async machines(): Promise<Map<string, string[]>> {
     if (MoveService.machinesCache) return MoveService.machinesCache;
@@ -76,31 +90,15 @@ export class MoveService {
     if (category) where.category = category;
     const pageNum = Math.max(1, Number(page) || 1);
     const sizeNum = Math.min(200, Math.max(1, Number(pageSize) || 50));
-    const total = await this.prisma.move.count({ where });
-    let sql = `
-      SELECT * FROM "Move" WHERE 1=1
-    `;
-    const params: any[] = [];
-    if (search) {
-      sql += ' AND ("nameZh" LIKE ? OR "nameEn" LIKE ? OR "nameJa" LIKE ?)';
-      const needle = `%${search}%`;
-      params.push(needle, needle, needle);
-    }
-    if (type) {
-      sql += ' AND "type" = ?';
-      params.push(type);
-    }
-    if (category) {
-      sql += ' AND "category" = ?';
-      params.push(category);
-    }
-    sql += `
-      ORDER BY CASE WHEN "id" GLOB '[0-9]*' THEN 0 ELSE 1 END,
-               CAST(REPLACE("id", 'z-', '') AS INTEGER), "id"
-      LIMIT ? OFFSET ?
-    `;
-    params.push(sizeNum, (pageNum - 1) * sizeNum);
-    const items = (await this.prisma.$queryRawUnsafe(sql, ...params)) as Move[];
+    const all = await this.prisma.move.findMany({ where });
+    // 排序规则：纯数字 id 在前（按数值），z- 前缀 id 在后（按数值），其余按字典序
+    all.sort((a, b) => {
+      const ra = moveRank(a.id);
+      const rb = moveRank(b.id);
+      return ra[0] - rb[0] || ra[1] - rb[1] || a.id.localeCompare(b.id);
+    });
+    const total = all.length;
+    const items = all.slice((pageNum - 1) * sizeNum, pageNum * sizeNum);
     const machines = await this.machines();
     return {
       total,
@@ -112,8 +110,6 @@ export class MoveService {
       })),
     };
   }
-
-  private static learnersCache: Map<string, MoveLearner[]> | null = null;
 
   private async learners(): Promise<Map<string, MoveLearner[]>> {
     if (MoveService.learnersCache) return MoveService.learnersCache;
@@ -217,3 +213,5 @@ export class MoveService {
     };
   }
 }
+
+registerCacheResetter('move', () => MoveService.resetCaches());

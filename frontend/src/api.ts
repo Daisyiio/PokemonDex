@@ -12,18 +12,22 @@ import type {
 } from './types'
 
 const BASE = '/api'
+const DEFAULT_TIMEOUT_MS = 15000
 
-async function get<T>(url: string): Promise<T> {
-  const res = await fetch(url)
+async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(url, {
+    signal: combineAbort(signal, DEFAULT_TIMEOUT_MS),
+  })
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`)
   return res.json() as Promise<T>
 }
 
-async function post<T>(url: string, body: unknown): Promise<T> {
+async function post<T>(url: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: combineAbort(signal, DEFAULT_TIMEOUT_MS),
   })
   if (!res.ok) {
     let msg = `HTTP ${res.status}: ${url}`
@@ -36,6 +40,19 @@ async function post<T>(url: string, body: unknown): Promise<T> {
     throw new Error(msg)
   }
   return res.json() as Promise<T>
+}
+
+function combineAbort(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const controller = new AbortController()
+  window.setTimeout(() => controller.abort(), timeoutMs)
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort()
+    } else {
+      signal.addEventListener('abort', () => controller.abort(), { once: true })
+    }
+  }
+  return controller.signal
 }
 
 export interface ListParams {
