@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, onActivated, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onActivated, reactive, ref, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { getPokemon, listPokemon, listPokemonIds, listAbilities, getMovesByGen, getPokemonEncounters, type PokemonNavItem, type MovesByGenResponse, type EncounterEntry } from '../api'
 import { imageUrl, typeColor } from '../types'
@@ -589,9 +589,18 @@ function cmpBg(entry: CompareEntry) {
   }
 }
 
-// 特性描述悬浮提示：预取两侧特性描述
+// 特性描述悬浮提示：用响应式 Map 存描述，悬浮即时触发加载
+const compareAbilityDesc = reactive(new Map<string, string>())
+
 function abilityTitle(name: string): string | undefined {
-  return abilityMetaCache.get(name)?.description
+  return compareAbilityDesc.get(name) || undefined
+}
+
+function ensureAbilityDesc(name: string) {
+  if (compareAbilityDesc.has(name)) return
+  void fetchAbilityMeta(name).then((meta) => {
+    if (meta?.description) compareAbilityDesc.set(name, meta.description)
+  })
 }
 
 function prefetchCompareAbilities() {
@@ -600,7 +609,7 @@ function prefetchCompareAbilities() {
     if (!e) continue
     for (const a of e.abilities) names.add(a.name)
   }
-  for (const n of names) void fetchAbilityMeta(n)
+  for (const n of names) ensureAbilityDesc(n)
 }
 
 watch([compareEntryA, compareEntryB], prefetchCompareAbilities)
@@ -1288,6 +1297,7 @@ watch(compareOpen, (open) => {
                   :key="a.name"
                   class="cmp-ability"
                   :title="abilityTitle(a.name)"
+                  @mouseenter="ensureAbilityDesc(a.name)"
                 >
                   {{ a.name }}<template v-if="a.hidden">（隐藏）</template>
                 </span>
@@ -1349,21 +1359,22 @@ watch(compareOpen, (open) => {
               </div>
               <button type="button" class="cmp-change" @click="resetCompareB">换一只</button>
               <div class="cmp-detail-block">
-                <div class="cmp-section-title">能力</div>
-                <div class="cmp-abilities">
-                  <span
-                    v-for="a in compareEntryB.abilities"
-                    :key="a.name"
-                    class="cmp-ability"
-                    :title="abilityTitle(a.name)"
-                  >
-                    {{ a.name }}<template v-if="a.hidden">（隐藏）</template>
-                  </span>
-                </div>
-                <div class="cmp-section-title">蛋组</div>
-                <div class="cmp-meta">{{ compareEntryB.eggGroups.join('、') || '—' }}</div>
-                <div class="cmp-section-title">身高 / 体重</div>
-                <div class="cmp-meta">{{ compareEntryB.height }} · {{ compareEntryB.weight }}</div>
+              <div class="cmp-section-title">能力</div>
+              <div class="cmp-abilities">
+                <span
+                  v-for="a in compareEntryB.abilities"
+                  :key="a.name"
+                  class="cmp-ability"
+                  :title="abilityTitle(a.name)"
+                  @mouseenter="ensureAbilityDesc(a.name)"
+                >
+                  {{ a.name }}<template v-if="a.hidden">（隐藏）</template>
+                </span>
+              </div>
+              <div class="cmp-section-title">蛋组</div>
+              <div class="cmp-meta">{{ compareEntryB.eggGroups.join('、') || '—' }}</div>
+              <div class="cmp-section-title">身高 / 体重</div>
+              <div class="cmp-meta">{{ compareEntryB.height }} · {{ compareEntryB.weight }}</div>
               </div>
             </div>
           </div>
@@ -2784,7 +2795,7 @@ watch(compareOpen, (open) => {
 }
 .compare-body {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 18px;
   align-items: start;
 }
