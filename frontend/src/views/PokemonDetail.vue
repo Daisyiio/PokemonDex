@@ -7,7 +7,6 @@ import TypeBadge from '../components/TypeBadge.vue'
 import CategoryBadge from '../components/CategoryBadge.vue'
 import SafeImage from '../components/SafeImage.vue'
 import ShapeIcon from '../components/ShapeIcon.vue'
-import StatsRadar from '../components/StatsRadar.vue'
 import type {
   PokemonDetail,
   PokemonSummary,
@@ -460,29 +459,139 @@ function methodClass(method: string): string {
 const compareOpen = ref(false)
 const compareSearch = ref('')
 const compareResults = ref<PokemonSummary[]>([])
+const compareActiveIndex = ref(-1)
 const compareLoading = ref(false)
 const compareError = ref('')
-const compareA = ref<PokemonDetail | null>(null)
-const compareB = ref<PokemonDetail | null>(null)
+const compareA = ref<{ d: PokemonDetail; formIdx: number } | null>(null)
+const compareB = ref<{ d: PokemonDetail; formIdx: number } | null>(null)
+const compareInputEl = ref<HTMLInputElement | null>(null)
 let compareTimer: number | undefined
 let compareSeq = 0
 
-const compareStatsLabels = ['HP', '攻击', '防御', '特攻', '特防', '速度']
+const COMPARE_STAT_KEYS = ['hp', 'attack', 'defense', 'sp_attack', 'sp_defense', 'speed'] as const
 
-function compareStatsData(d: PokemonDetail): number[] {
-  const data = d.stats[0]?.data
-  if (!data) return []
-  return ['hp', 'attack', 'defense', 'sp_attack', 'sp_defense', 'speed'].map((k) =>
-    Number(data[k] ?? 0)
+interface CompareEntry {
+  name: string
+  dexId: string
+  image: string
+  types: string[]
+  stats: { key: string; label: string; value: number }[]
+  total: number
+  abilities: { name: string; hidden: boolean }[]
+  height: string
+  weight: string
+  eggGroups: string[]
+}
+
+function buildCompareEntry(d: PokemonDetail, formIdx: number): CompareEntry {
+  const f = d.forms[formIdx]
+  const data = d.stats[formIdx]?.data || {}
+  const stats = COMPARE_STAT_KEYS.map((k) => ({
+    key: k,
+    label: statLabels[k] || k,
+    value: Number(data[k] ?? 0),
+  }))
+  return {
+    name: d.name_zh,
+    dexId: d.pokedex_id,
+    image: f?.image ? imageUrl('official', f.image) : '',
+    types: f?.types || [],
+    stats,
+    total: stats.reduce((s, st) => s + st.value, 0),
+    abilities: (f?.abilities || []).map((a) => ({ name: a.name, hidden: a.is_hidden })),
+    height: f?.height || '—',
+    weight: f?.weight || '—',
+    eggGroups: (f?.egg_groups || []).map(normalizeEggGroup),
+  }
+}
+
+const compareEntryA = computed<CompareEntry | null>(() =>
+  compareA.value ? buildCompareEntry(compareA.value.d, compareA.value.formIdx) : null
+)
+const compareEntryB = computed<CompareEntry | null>(() =>
+  compareB.value ? buildCompareEntry(compareB.value.d, compareB.value.formIdx) : null
+)
+
+// 每个种族值条的最大刻度（两侧所有数值的 1.1 倍，避免贴满）
+const compareStatMax = computed(() => {
+  const all = [...(compareEntryA.value?.stats || []), ...(compareEntryB.value?.stats || [])].map(
+    (s) => s.value
   )
+  return Math.max(1, ...all) * 1.1
+})
+
+function compareWin(statKey: string): 'a' | 'b' | 'tie' {
+  const a = compareEntryA.value?.stats.find((s) => s.key === statKey)?.value ?? 0
+  const b = compareEntryB.value?.stats.find((s) => s.key === statKey)?.value ?? 0
+  if (a === b) return 'tie'
+  return a > b ? 'a' : 'b'
+}
+
+// A 的某属性攻击 B（依据 B 的相性表）；返回倍率或 null
+function matchupDamage(defender: { d: PokemonDetail; formIdx: number }, atkType: string): number | null {
+  const list = defender.d.type_effectiveness
+  const entry = matchFormEntry(list, defender.d.forms[defender.formIdx]) || list[0]
+  const hit = entry?.data?.find((e) => e.type === atkType)
+  return hit ? Number(hit.damage) : null
+}
+
+function matchupLabel(v: number | null): string {
+  if (v == null) return '—'
+  if (v === 0) return '×0'
+  if (v === 0.25) return '×¼'
+  if (v === 0.5) return '×½'
+  return `×${v}`
+}
+
+const matchupAToB = computed(() => {
+  const a = compareEntryA.value
+  const b = compareB.value
+  if (!a || !b) return []
+  return a.types.map((t) => ({ type: t, label: matchupLabel(matchupDamage(b, t)) }))
+})
+
+const matchupBToA = computed(() => {
+  const a = compareA.value
+  const b = compareEntryB.value
+  if (!a || !b) return []
+  return b.types.map((t) => ({ type: t, label: matchupLabel(matchupDamage(a, t)) }))
+})
+
+function aStatVal(key: string): number {
+  return compareEntryA.value?.stats.find((s) => s.key === key)?.value ?? 0
+}
+function bStatVal(key: string): number {
+  return compareEntryB.value?.stats.find((s) => s.key === key)?.value ?? 0
+}
+function aStatPct(key: string): string {
+  return `${Math.min(100, (aStatVal(key) / compareStatMax.value) * 100)}%`
+}
+function bStatPct(key: string): string {
+  return `${Math.min(100, (bStatVal(key) / compareStatMax.value) * 100)}%`
+}
+function cmpSideClass(win: 'a' | 'b' | 'tie', side: 'a' | 'b'): string {
+  if (win === 'tie') return 'tie'
+  return win === side ? 'win' : 'lose'
+}
+function totalSideClass(side: 'a' | 'b'): string {
+  const a = compareEntryA.value?.total ?? 0
+  const b = compareEntryB.value?.total ?? 0
+  if (a === b) return 'tie'
+  return side === 'a' ? (a > b ? 'win' : 'lose') : b > a ? 'win' : 'lose'
+}
+function cmpBg(entry: CompareEntry) {
+  return {
+    background: `linear-gradient(160deg, ${typeColor(entry.types[0] || '一般')}22, var(--surface-2))`,
+  }
 }
 
 function openCompare() {
   compareOpen.value = true
-  compareA.value = detail.value
+  compareA.value = { d: detail.value!, formIdx: activeForm.value }
   compareB.value = null
   compareSearch.value = ''
   compareResults.value = []
+  compareActiveIndex.value = -1
   compareError.value = ''
 }
 
@@ -491,7 +600,24 @@ function closeCompare() {
   window.clearTimeout(compareTimer)
 }
 
+function swapCompare() {
+  const tmp = compareA.value
+  compareA.value = compareB.value
+  compareB.value = tmp
+  compareError.value = ''
+}
+
+function resetCompareB() {
+  compareB.value = null
+  compareSearch.value = ''
+  compareResults.value = []
+  compareActiveIndex.value = -1
+  compareError.value = ''
+  compareInputEl.value?.focus()
+}
+
 function onCompareInput() {
+  compareActiveIndex.value = -1
   window.clearTimeout(compareTimer)
   compareTimer = window.setTimeout(runCompareSearch, 250)
 }
@@ -508,6 +634,7 @@ async function runCompareSearch() {
     const res = await listPokemon({ search: kw, pageSize: 12 })
     if (mySeq !== compareSeq) return
     compareResults.value = res.items
+    compareActiveIndex.value = -1
   } catch {
     if (mySeq === compareSeq) compareResults.value = []
   } finally {
@@ -523,7 +650,11 @@ async function pickCompare(id: string) {
   compareLoading.value = true
   compareError.value = ''
   try {
-    compareB.value = await getPokemon(id)
+    const d = await getPokemon(id)
+    compareB.value = { d, formIdx: 0 }
+    compareResults.value = []
+    compareSearch.value = ''
+    compareActiveIndex.value = -1
   } catch {
     compareError.value = '加载对比对象失败'
   } finally {
@@ -531,14 +662,51 @@ async function pickCompare(id: string) {
   }
 }
 
-function compareFormImg(d: PokemonDetail): string {
-  const img = d.forms[0]?.image
-  return img ? imageUrl('official', img) : ''
+function onCompareKeydown(e: KeyboardEvent) {
+  if (e.isComposing) return
+  if (e.key === 'Escape') {
+    if (compareResults.value.length) {
+      compareResults.value = []
+      compareActiveIndex.value = -1
+    } else {
+      closeCompare()
+    }
+    return
+  }
+  if (!compareResults.value.length) return
+  const n = compareResults.value.length
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    compareActiveIndex.value = (compareActiveIndex.value + 1) % n
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    compareActiveIndex.value = (compareActiveIndex.value - 1 + n) % n
+  } else if (e.key === 'Enter') {
+    const hit = compareResults.value[compareActiveIndex.value]
+    if (hit) {
+      e.preventDefault()
+      pickCompare(hit.id)
+    }
+  }
+}
+
+function onCompareWindowKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && compareOpen.value) {
+    // 输入框内的 Esc 已由 onCompareKeydown 处理（先清结果，再关弹窗）
+    if ((e.target as HTMLElement)?.closest?.('.compare-search')) return
+    closeCompare()
+  }
 }
 
 // 弹窗打开时锁定背景滚动，避免内部滚动联动外部页面
 watch(compareOpen, (open) => {
   document.body.style.overflow = open ? 'hidden' : ''
+  if (open) {
+    window.addEventListener('keydown', onCompareWindowKeydown)
+  } else {
+    window.removeEventListener('keydown', onCompareWindowKeydown)
+    compareResults.value = []
+  }
 })
 
 </script>
@@ -1060,107 +1228,129 @@ watch(compareOpen, (open) => {
         <span class="compare-title">对比宝可梦</span>
         <button type="button" class="compare-close" aria-label="关闭" @click="closeCompare">✕</button>
       </div>
-      <div class="compare-body">
-        <div class="compare-search">
-          <input
-            v-model="compareSearch"
-            type="text"
-            placeholder="搜索第二只宝可梦（编号 / 名称 / 英文名）…"
-            @input="onCompareInput"
-          />
-          <div v-if="compareResults.length" class="compare-results">
-            <button
-              v-for="p in compareResults"
-              :key="p.id"
-              type="button"
-              class="compare-result"
-              @click="pickCompare(p.id)"
-            >
-              <span class="cr-img">
-                <SafeImage v-if="p.image" :src="imageUrl('official', p.image)" :alt="p.nameZh" />
-              </span>
-              <span class="cr-id">#{{ p.id }}</span>
-              <span class="cr-name">{{ p.nameZh }}</span>
-            </button>
+
+      <div class="compare-search">
+        <input
+          ref="compareInputEl"
+          v-model="compareSearch"
+          type="text"
+          placeholder="搜索第二只宝可梦（编号 / 名称 / 英文名），↑↓ 选择、回车确认…"
+          @input="onCompareInput"
+          @keydown="onCompareKeydown"
+        />
+        <div class="compare-search-actions">
+          <span v-if="compareB" class="compare-selected">
+            已选：{{ compareB.d.name_zh }}
+          </span>
+          <button v-if="compareB" type="button" class="compare-reset" @click="resetCompareB">换一只</button>
+        </div>
+        <div v-if="compareResults.length" class="compare-results">
+          <button
+            v-for="(p, i) in compareResults"
+            :key="p.id"
+            type="button"
+            class="compare-result"
+            :class="{ active: i === compareActiveIndex }"
+            @mouseenter="compareActiveIndex = i"
+            @click="pickCompare(p.id)"
+          >
+            <span class="cr-img">
+              <SafeImage v-if="p.image" :src="imageUrl('official', p.image)" :alt="p.nameZh" />
+            </span>
+            <span class="cr-id">#{{ p.id }}</span>
+            <span class="cr-name">{{ p.nameZh }}</span>
+          </button>
+        </div>
+        <p v-if="compareError" class="compare-error">{{ compareError }}</p>
+        <p v-if="compareLoading && !compareB" class="compare-hint">加载中…</p>
+      </div>
+
+      <div v-if="compareA && compareB && compareEntryA && compareEntryB" class="compare-body">
+        <div class="cmp-sides">
+          <div class="cmp-side">
+            <div class="cmp-img" :style="cmpBg(compareEntryA)">
+              <SafeImage v-if="compareEntryA.image" :src="compareEntryA.image" :alt="compareEntryA.name" />
+            </div>
+            <div class="cmp-name">#{{ compareEntryA.dexId }} {{ compareEntryA.name }}</div>
+            <div class="cmp-types">
+              <TypeBadge v-for="t in compareEntryA.types" :key="t" :type="t" size="sm" />
+            </div>
           </div>
-          <p v-if="compareError" class="compare-error">{{ compareError }}</p>
-          <p v-if="compareLoading && !compareB" class="compare-hint">加载中…</p>
-          <p v-if="!compareB && !compareLoading && !compareError" class="compare-hint">
-            输入关键字选择要对比的宝可梦
-          </p>
+          <button type="button" class="cmp-swap" title="交换左右" aria-label="交换左右" @click="swapCompare">⇄</button>
+          <div class="cmp-side">
+            <div class="cmp-img" :style="cmpBg(compareEntryB)">
+              <SafeImage v-if="compareEntryB.image" :src="compareEntryB.image" :alt="compareEntryB.name" />
+            </div>
+            <div class="cmp-name">#{{ compareEntryB.dexId }} {{ compareEntryB.name }}</div>
+            <div class="cmp-types">
+              <TypeBadge v-for="t in compareEntryB.types" :key="t" :type="t" size="sm" />
+            </div>
+          </div>
         </div>
 
-        <div v-if="compareA && compareB" class="compare-grid">
-          <div class="cmp-col">
-            <div
-              class="cmp-img"
-              :style="{ background: `linear-gradient(160deg, ${typeColor(compareA.forms[0]?.types[0] || '一般')}22, var(--surface-2))` }"
-            >
-              <SafeImage v-if="compareFormImg(compareA)" :src="compareFormImg(compareA)" :alt="compareA.name_zh" />
-            </div>
-            <div class="cmp-name">#{{ compareA.pokedex_id }} {{ compareA.name_zh }}</div>
-            <div class="cmp-types">
-              <TypeBadge v-for="t in compareA.forms[0]?.types" :key="t" :type="t" size="sm" />
-            </div>
-            <div class="cmp-section-title">种族值（基础形态）</div>
-            <StatsRadar
-              v-if="compareStatsData(compareA).length"
-              :labels="compareStatsLabels"
-              :values="compareStatsData(compareA)"
-              class="cmp-radar"
-            />
-            <div class="cmp-stats">
-              <div v-for="(v, i) in compareStatsData(compareA)" :key="i" class="cmp-stat">
-                <span class="cmp-stat-label">{{ compareStatsLabels[i] }}</span>
-                <b class="cmp-stat-val">{{ v }}</b>
+        <div class="cmp-section">
+          <div class="cmp-section-title">种族值对比</div>
+          <div class="stat-cmp">
+            <div v-for="s in compareEntryA.stats" :key="s.key" class="stat-cmp-row">
+              <span class="sc-label">{{ s.label }}</span>
+              <div class="sc-side sc-a">
+                <b class="sc-val" :class="cmpSideClass(compareWin(s.key), 'a')">{{ aStatVal(s.key) }}</b>
+                <div class="sc-track">
+                  <div class="sc-fill" :class="cmpSideClass(compareWin(s.key), 'a')" :style="{ width: aStatPct(s.key) }" />
+                </div>
+              </div>
+              <div class="sc-side sc-b">
+                <div class="sc-track">
+                  <div class="sc-fill" :class="cmpSideClass(compareWin(s.key), 'b')" :style="{ width: bStatPct(s.key) }" />
+                </div>
+                <b class="sc-val" :class="cmpSideClass(compareWin(s.key), 'b')">{{ bStatVal(s.key) }}</b>
               </div>
             </div>
-            <div class="cmp-section-title">能力</div>
-            <div class="cmp-abilities">
-              <span v-for="a in compareA.forms[0]?.abilities" :key="a.name" class="cmp-ability">
-                {{ a.name }}<template v-if="a.is_hidden">（隐藏）</template>
-              </span>
-            </div>
-            <div class="cmp-section-title">身高 / 体重</div>
-            <div class="cmp-meta">
-              <span>{{ compareA.forms[0]?.height }} · {{ compareA.forms[0]?.weight }}</span>
+            <div class="stat-cmp-row sc-total">
+              <span class="sc-label">总和</span>
+              <b class="sc-val" :class="totalSideClass('a')">{{ compareEntryA.total }}</b>
+              <b class="sc-val" :class="totalSideClass('b')">{{ compareEntryB.total }}</b>
             </div>
           </div>
+        </div>
 
-          <div class="cmp-col">
-            <div
-              class="cmp-img"
-              :style="{ background: `linear-gradient(160deg, ${typeColor(compareB.forms[0]?.types[0] || '一般')}22, var(--surface-2))` }"
-            >
-              <SafeImage v-if="compareFormImg(compareB)" :src="compareFormImg(compareB)" :alt="compareB.name_zh" />
-            </div>
-            <div class="cmp-name">#{{ compareB.pokedex_id }} {{ compareB.name_zh }}</div>
-            <div class="cmp-types">
-              <TypeBadge v-for="t in compareB.forms[0]?.types" :key="t" :type="t" size="sm" />
-            </div>
-            <div class="cmp-section-title">种族值（基础形态）</div>
-            <StatsRadar
-              v-if="compareStatsData(compareB).length"
-              :labels="compareStatsLabels"
-              :values="compareStatsData(compareB)"
-              class="cmp-radar"
-            />
-            <div class="cmp-stats">
-              <div v-for="(v, i) in compareStatsData(compareB)" :key="i" class="cmp-stat">
-                <span class="cmp-stat-label">{{ compareStatsLabels[i] }}</span>
-                <b class="cmp-stat-val">{{ v }}</b>
-              </div>
-            </div>
+        <div class="cmp-section">
+          <div class="cmp-section-title">{{ compareEntryA.name }} 攻击 {{ compareEntryB.name }}</div>
+          <div class="matchup">
+            <span v-for="m in matchupAToB" :key="m.type" class="mu-chip">
+              <span class="mu-type" :style="{ background: typeColor(m.type) }">{{ m.type }}</span>
+              <span class="mu-val">{{ m.label }}</span>
+            </span>
+          </div>
+          <div class="cmp-section-title sub">{{ compareEntryB.name }} 攻击 {{ compareEntryA.name }}</div>
+          <div class="matchup">
+            <span v-for="m in matchupBToA" :key="m.type" class="mu-chip">
+              <span class="mu-type" :style="{ background: typeColor(m.type) }">{{ m.type }}</span>
+              <span class="mu-val">{{ m.label }}</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="cmp-details">
+          <div class="cmp-detail-col">
             <div class="cmp-section-title">能力</div>
             <div class="cmp-abilities">
-              <span v-for="a in compareB.forms[0]?.abilities" :key="a.name" class="cmp-ability">
-                {{ a.name }}<template v-if="a.is_hidden">（隐藏）</template>
+              <span v-for="a in compareEntryA.abilities" :key="a.name" class="cmp-ability">
+                {{ a.name }}<template v-if="a.hidden">（隐藏）</template>
               </span>
             </div>
-            <div class="cmp-section-title">身高 / 体重</div>
-            <div class="cmp-meta">
-              <span>{{ compareB.forms[0]?.height }} · {{ compareB.forms[0]?.weight }}</span>
+            <div class="cmp-section-title">蛋组</div>
+            <div class="cmp-meta">{{ compareEntryA.eggGroups.join('、') || '—' }}</div>
+          </div>
+          <div class="cmp-detail-col">
+            <div class="cmp-section-title">能力</div>
+            <div class="cmp-abilities">
+              <span v-for="a in compareEntryB.abilities" :key="a.name" class="cmp-ability">
+                {{ a.name }}<template v-if="a.hidden">（隐藏）</template>
+              </span>
             </div>
+            <div class="cmp-section-title">蛋组</div>
+            <div class="cmp-meta">{{ compareEntryB.eggGroups.join('、') || '—' }}</div>
           </div>
         </div>
       </div>
@@ -2481,8 +2671,8 @@ watch(compareOpen, (open) => {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
-  width: min(96vw, 880px);
-  max-height: 90vh;
+  width: min(96vw, 920px);
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2515,9 +2705,8 @@ watch(compareOpen, (open) => {
   background: var(--hover-bg);
   color: var(--text);
 }
-.compare-body {
-  padding: 16px 18px;
-  overflow-y: auto;
+.compare-search {
+  padding: 12px 18px 0;
 }
 .compare-search input {
   width: 100%;
@@ -2533,11 +2722,37 @@ watch(compareOpen, (open) => {
   border-color: var(--text-faint);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+.compare-search-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+.compare-selected {
+  font-size: 13px;
+  color: var(--ok);
+  font-weight: 600;
+}
+.compare-reset {
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.compare-reset:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .compare-results {
   margin-top: 8px;
   border: 1px solid var(--border-soft);
   border-radius: 12px;
-  max-height: 240px;
+  max-height: 220px;
   overflow-y: auto;
   background: var(--drop-bg);
 }
@@ -2555,8 +2770,10 @@ watch(compareOpen, (open) => {
   text-align: left;
   transition: background 0.12s;
 }
-.compare-result:hover {
+.compare-result:hover,
+.compare-result.active {
   background: var(--drop-hover);
+  color: var(--text);
 }
 .cr-img {
   width: 34px;
@@ -2587,34 +2804,36 @@ watch(compareOpen, (open) => {
   color: var(--text-faint);
   font-size: 13px;
 }
-.compare-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-top: 16px;
+.compare-body {
+  padding: 14px 18px 18px;
+  overflow-y: auto;
 }
-.cmp-col {
-  background: var(--surface-2);
-  border: 1px solid var(--border-faint);
-  border-radius: 14px;
-  padding: 14px;
+.cmp-sides {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.cmp-side {
+  flex: 1;
+  max-width: 300px;
   text-align: center;
 }
 .cmp-img {
-  height: 140px;
+  height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 12px;
 }
 .cmp-img img {
-  max-width: 120px;
-  max-height: 120px;
+  max-width: 104px;
+  max-height: 104px;
 }
 .cmp-name {
   font-size: 15px;
   font-weight: 700;
-  margin-top: 10px;
+  margin-top: 8px;
   color: var(--text);
 }
 .cmp-types {
@@ -2623,36 +2842,143 @@ watch(compareOpen, (open) => {
   gap: 4px;
   margin-top: 6px;
 }
+.cmp-swap {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cmp-swap:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.cmp-section {
+  margin-top: 18px;
+  border-top: 1px dashed var(--border-faint);
+  padding-top: 14px;
+}
 .cmp-section-title {
-  margin-top: 14px;
   font-size: 12px;
   font-weight: 700;
   color: var(--text-3);
   letter-spacing: 0.5px;
+  margin-bottom: 8px;
 }
-.cmp-radar {
-  margin: 8px auto 0;
-  transform-origin: top center;
+.cmp-section-title.sub {
+  margin-top: 12px;
 }
-.cmp-stats {
-  margin-top: 8px;
+.stat-cmp {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px 12px;
+  flex-direction: column;
+  gap: 7px;
 }
-.cmp-stat {
+.stat-cmp-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.sc-label {
   font-size: 12px;
-  color: var(--text-2);
+  color: var(--text-3);
+  font-weight: 600;
 }
-.cmp-stat-label {
+.sc-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sc-a {
+  flex-direction: row-reverse;
+}
+.sc-val {
+  font-size: 13px;
+  min-width: 30px;
+  text-align: center;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.sc-val.win {
+  color: var(--accent);
+  font-weight: 800;
+}
+.sc-val.lose {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+.sc-val.tie {
   color: var(--text-3);
 }
-.cmp-stat-val {
-  margin-left: 2px;
+.sc-track {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.sc-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--text-faint);
+  opacity: 0.45;
+  transition: width 0.2s ease;
+}
+.sc-fill.win {
+  background: var(--accent);
+  opacity: 1;
+}
+.sc-fill.tie {
+  background: var(--text-3);
+  opacity: 0.5;
+}
+.sc-total {
+  border-top: 1px solid var(--border-faint);
+  padding-top: 7px;
+}
+.matchup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.mu-type {
+  color: #fff;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.mu-val {
+  color: var(--text-2);
+  font-weight: 700;
+}
+.cmp-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 18px;
+  border-top: 1px dashed var(--border-faint);
+  padding-top: 14px;
+}
+.cmp-detail-col {
+  min-width: 0;
 }
 .cmp-abilities {
-  margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -2663,13 +2989,23 @@ watch(compareOpen, (open) => {
   word-break: break-all;
 }
 .cmp-meta {
-  margin-top: 8px;
   font-size: 13px;
   color: var(--text-2);
 }
 @media (max-width: 640px) {
-  .compare-grid {
+  .cmp-details {
     grid-template-columns: 1fr;
+  }
+  .cmp-img {
+    height: 96px;
+  }
+  .stat-cmp-row {
+    grid-template-columns: 40px 1fr 1fr;
+    gap: 6px;
+  }
+  .sc-val {
+    min-width: 26px;
+    font-size: 12px;
   }
 }
 </style>
