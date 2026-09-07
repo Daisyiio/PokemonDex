@@ -16,6 +16,7 @@ import {
   type BeadGrid,
 } from '../beads/beads'
 import { useScrollMemory } from '../composables/useScrollMemory'
+import { useModalDrag } from '../composables/useModalDrag'
 
 useScrollMemory()
 
@@ -370,6 +371,8 @@ function onExport() {
 const lightboxOpen = ref(false)
 const lightboxZoom = ref(1)
 const lightboxEl = ref<HTMLCanvasElement | null>(null)
+const lightboxModalEl = ref<HTMLElement | null>(null)
+const lightboxDrag = useModalDrag()
 const LIGHTBOX_MAX_ZOOM = 8
 
 function renderLightbox() {
@@ -394,6 +397,14 @@ function openLightbox() {
 
 function closeLightbox() {
   lightboxOpen.value = false
+  if (lightboxModalEl.value) {
+    const el = lightboxModalEl.value
+    el.style.position = ''
+    el.style.left = ''
+    el.style.top = ''
+    el.style.margin = ''
+    el.style.maxWidth = ''
+  }
 }
 
 function zoomLightbox(delta: number) {
@@ -800,8 +811,14 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="lightboxOpen" class="lightbox-backdrop" role="dialog" aria-modal="true" aria-label="拼豆图纸放大预览" @click.self="closeLightbox">
-      <div class="lightbox-modal">
-        <div class="lightbox-head">
+      <div ref="lightboxModalEl" class="lightbox-modal">
+        <div
+          class="lightbox-head"
+          @pointerdown="lightboxDrag.onDown($event, lightboxModalEl)"
+          @pointermove="lightboxDrag.onMove($event, lightboxModalEl)"
+          @pointerup="lightboxDrag.onUp"
+          @pointercancel="lightboxDrag.onUp"
+        >
           <span class="lightbox-title">{{ sourceName }} · 放大预览</span>
           <span class="lightbox-hint">滚轮缩放 · 拖拽平移</span>
           <div class="lightbox-zoom">
@@ -1292,6 +1309,9 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-faint);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 .lightbox-title {
   font-size: 13px;

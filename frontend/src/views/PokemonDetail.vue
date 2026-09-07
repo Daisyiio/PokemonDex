@@ -17,6 +17,7 @@ import type {
 } from '../types'
 import { normalizeEggGroup } from '../types'
 import { useScrollMemory } from '../composables/useScrollMemory'
+import { useModalDrag } from '../composables/useModalDrag'
 
 useScrollMemory()
 
@@ -469,6 +470,8 @@ const compareA = ref<{ d: PokemonDetail; formIdx: number } | null>(null)
 const compareB = ref<{ d: PokemonDetail; formIdx: number } | null>(null)
 const compareSearchEl = ref<HTMLInputElement | null>(null)
 const comparePickerEl = ref<HTMLDivElement | null>(null)
+const compareModalEl = ref<HTMLElement | null>(null)
+const compareDrag = useModalDrag()
 let compareTimer: number | undefined
 let compareListSeq = 0
 
@@ -652,6 +655,14 @@ function openCompare() {
 function closeCompare() {
   compareOpen.value = false
   window.clearTimeout(compareTimer)
+  if (compareModalEl.value) {
+    const el = compareModalEl.value
+    el.style.position = ''
+    el.style.left = ''
+    el.style.top = ''
+    el.style.margin = ''
+    el.style.maxWidth = ''
+  }
 }
 
 function resetCompareB() {
@@ -1269,8 +1280,14 @@ watch(compareOpen, (open) => {
   </div>
 
   <div v-if="compareOpen" class="compare-backdrop" @click.self="closeCompare">
-    <div class="compare-modal" role="dialog" aria-modal="true" aria-label="宝可梦对比">
-      <div class="compare-head">
+    <div ref="compareModalEl" class="compare-modal" role="dialog" aria-modal="true" aria-label="宝可梦对比">
+      <div
+        class="compare-head"
+        @pointerdown="compareDrag.onDown($event, compareModalEl)"
+        @pointermove="compareDrag.onMove($event, compareModalEl)"
+        @pointerup="compareDrag.onUp"
+        @pointercancel="compareDrag.onUp"
+      >
         <span class="compare-title">对比宝可梦</span>
         <span v-if="compareEntryA" class="compare-sub">#{{ compareEntryA.dexId }} {{ compareEntryA.name }}</span>
         <button type="button" class="compare-close" aria-label="关闭" @click="closeCompare">✕</button>
@@ -2759,6 +2776,9 @@ watch(compareOpen, (open) => {
   gap: 12px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border-faint);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 .compare-title {
   font-size: 15px;
@@ -3085,20 +3105,78 @@ watch(compareOpen, (open) => {
 }
 @media (max-width: 640px) {
   .compare-backdrop {
-    padding: 2vh 8px 8px;
+    padding: 0;
+    align-items: flex-start;
+  }
+  .compare-modal {
+    width: 100vw;
+    max-height: 96vh;
+    border-radius: 0 0 16px 16px;
+  }
+  .compare-head {
+    padding: 12px 14px;
+  }
+  .compare-scroll {
+    padding: 12px 14px 20px;
   }
   .compare-body {
     grid-template-columns: 1fr;
     gap: 12px;
   }
+  .cmp-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+    padding: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-faint);
+    border-radius: 12px;
+  }
   .cmp-img {
-    height: 96px;
+    width: 76px;
+    height: 76px;
+    flex-shrink: 0;
+  }
+  .cmp-img img {
+    max-width: 64px;
+    max-height: 64px;
+  }
+  .cmp-name {
+    margin-top: 0;
+    font-size: 14px;
+    flex: 1;
+  }
+  .cmp-types {
+    justify-content: flex-start;
+    margin-top: 4px;
+  }
+  .cmp-change {
+    margin-top: 0;
+  }
+  .cmp-detail-block {
+    margin-top: 10px;
+    padding-top: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 12px;
+  }
+  .cmp-detail-block .cmp-section-title {
+    margin-bottom: 2px;
+    font-size: 11px;
+  }
+  .cmp-detail-block .cmp-abilities,
+  .cmp-detail-block .cmp-meta {
+    font-size: 12px;
   }
   .cmp-picker {
-    min-height: 260px;
+    min-height: 320px;
   }
   .cmp-picker-list {
-    max-height: 40vh;
+    max-height: 46vh;
+  }
+  .cmp-pick-item {
+    padding: 8px 10px;
   }
   .stat-cmp-row {
     grid-template-columns: 40px 1fr 1fr;
@@ -3107,6 +3185,9 @@ watch(compareOpen, (open) => {
   .sc-val {
     min-width: 26px;
     font-size: 12px;
+  }
+  .mu-chip {
+    font-size: 11px;
   }
 }
 </style>
