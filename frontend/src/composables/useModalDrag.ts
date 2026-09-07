@@ -15,6 +15,9 @@ export function useModalDrag() {
 
   function onDown(e: PointerEvent, modal: HTMLElement | null) {
     if (!modal) return
+    // 移动端/H5 不做拖拽（触摸、窄屏、粗指针设备均跳过）
+    if (e.pointerType !== 'mouse') return
+    if (window.innerWidth <= 768) return
     const t = e.target as HTMLElement
     // 点击按钮/输入框等交互元素时不触发拖拽
     if (t.closest('button, input, a, select, textarea, [role="button"]')) return

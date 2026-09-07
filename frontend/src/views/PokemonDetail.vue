@@ -1301,28 +1301,36 @@ watch(compareOpen, (open) => {
               <div class="cmp-img" :style="cmpBg(compareEntryA)">
                 <SafeImage v-if="compareEntryA.image" :src="compareEntryA.image" :alt="compareEntryA.name" />
               </div>
-              <div class="cmp-name">{{ compareEntryA.name }}</div>
-              <div class="cmp-types">
-                <TypeBadge v-for="t in compareEntryA.types" :key="t" :type="t" size="sm" />
+              <div class="cmp-card-body">
+                <div class="cmp-name">#{{ compareEntryA.dexId }} {{ compareEntryA.name }}</div>
+                <div class="cmp-types">
+                  <TypeBadge v-for="t in compareEntryA.types" :key="t" :type="t" size="sm" />
+                </div>
+                <div class="cmp-info">
+                  <div class="ci-row">
+                    <span class="ci-label">能力</span>
+                    <span class="ci-chips">
+                      <span
+                        v-for="a in compareEntryA.abilities"
+                        :key="a.name"
+                        class="ci-chip"
+                        :title="abilityTitle(a.name)"
+                        @mouseenter="ensureAbilityDesc(a.name)"
+                      >
+                        {{ a.name }}<template v-if="a.hidden">·隐藏</template>
+                      </span>
+                    </span>
+                  </div>
+                  <div class="ci-row">
+                    <span class="ci-label">蛋组</span>
+                    <span class="ci-value">{{ compareEntryA.eggGroups.join('、') || '—' }}</span>
+                  </div>
+                  <div class="ci-row">
+                    <span class="ci-label">身高 / 体重</span>
+                    <span class="ci-value">{{ compareEntryA.height }} · {{ compareEntryA.weight }}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="cmp-detail-block">
-              <div class="cmp-section-title">能力</div>
-              <div class="cmp-abilities">
-                <span
-                  v-for="a in compareEntryA.abilities"
-                  :key="a.name"
-                  class="cmp-ability"
-                  :title="abilityTitle(a.name)"
-                  @mouseenter="ensureAbilityDesc(a.name)"
-                >
-                  {{ a.name }}<template v-if="a.hidden">（隐藏）</template>
-                </span>
-              </div>
-              <div class="cmp-section-title">蛋组</div>
-              <div class="cmp-meta">{{ compareEntryA.eggGroups.join('、') || '—' }}</div>
-              <div class="cmp-section-title">身高 / 体重</div>
-              <div class="cmp-meta">{{ compareEntryA.height }} · {{ compareEntryA.weight }}</div>
             </div>
           </div>
 
@@ -1370,28 +1378,36 @@ watch(compareOpen, (open) => {
               <div class="cmp-img" :style="cmpBg(compareEntryB)">
                 <SafeImage v-if="compareEntryB.image" :src="compareEntryB.image" :alt="compareEntryB.name" />
               </div>
-              <div class="cmp-name">{{ compareEntryB.name }}</div>
-              <div class="cmp-types">
-                <TypeBadge v-for="t in compareEntryB.types" :key="t" :type="t" size="sm" />
-              </div>
-              <button type="button" class="cmp-change" @click="resetCompareB">换一只</button>
-              <div class="cmp-detail-block">
-              <div class="cmp-section-title">能力</div>
-              <div class="cmp-abilities">
-                <span
-                  v-for="a in compareEntryB.abilities"
-                  :key="a.name"
-                  class="cmp-ability"
-                  :title="abilityTitle(a.name)"
-                  @mouseenter="ensureAbilityDesc(a.name)"
-                >
-                  {{ a.name }}<template v-if="a.hidden">（隐藏）</template>
-                </span>
-              </div>
-              <div class="cmp-section-title">蛋组</div>
-              <div class="cmp-meta">{{ compareEntryB.eggGroups.join('、') || '—' }}</div>
-              <div class="cmp-section-title">身高 / 体重</div>
-              <div class="cmp-meta">{{ compareEntryB.height }} · {{ compareEntryB.weight }}</div>
+              <div class="cmp-card-body">
+                <div class="cmp-name">#{{ compareEntryB.dexId }} {{ compareEntryB.name }}</div>
+                <div class="cmp-types">
+                  <TypeBadge v-for="t in compareEntryB.types" :key="t" :type="t" size="sm" />
+                </div>
+                <div class="cmp-info">
+                  <div class="ci-row">
+                    <span class="ci-label">能力</span>
+                    <span class="ci-chips">
+                      <span
+                        v-for="a in compareEntryB.abilities"
+                        :key="a.name"
+                        class="ci-chip"
+                        :title="abilityTitle(a.name)"
+                        @mouseenter="ensureAbilityDesc(a.name)"
+                      >
+                        {{ a.name }}<template v-if="a.hidden">·隐藏</template>
+                      </span>
+                    </span>
+                  </div>
+                  <div class="ci-row">
+                    <span class="ci-label">蛋组</span>
+                    <span class="ci-value">{{ compareEntryB.eggGroups.join('、') || '—' }}</span>
+                  </div>
+                  <div class="ci-row">
+                    <span class="ci-label">身高 / 体重</span>
+                    <span class="ci-value">{{ compareEntryB.height }} · {{ compareEntryB.weight }}</span>
+                  </div>
+                </div>
+                <button type="button" class="cmp-change" @click="resetCompareB">换一只</button>
               </div>
             </div>
           </div>
@@ -2776,9 +2792,13 @@ watch(compareOpen, (open) => {
   gap: 12px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border-faint);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
+}
+@media (min-width: 769px) {
+  .compare-head {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
 }
 .compare-title {
   font-size: 15px;
@@ -2823,33 +2843,85 @@ watch(compareOpen, (open) => {
   min-width: 0;
 }
 .cmp-card {
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--surface-2);
   text-align: center;
 }
 .cmp-img {
-  height: 120px;
+  height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 12px;
 }
 .cmp-img img {
-  max-width: 104px;
-  max-height: 104px;
+  max-width: 120px;
+  max-height: 120px;
 }
 .cmp-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
-  margin-top: 8px;
+  margin-top: 10px;
   color: var(--text);
+  word-break: break-all;
 }
 .cmp-types {
   display: flex;
   justify-content: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+.cmp-card-body {
+  min-width: 0;
+}
+.cmp-info {
+  margin-top: 14px;
+  text-align: left;
+  border-top: 1px dashed var(--border-faint);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ci-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+.ci-label {
+  flex-shrink: 0;
+  min-width: 56px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ci-chips {
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px;
-  margin-top: 6px;
+}
+.ci-chip {
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: help;
+  transition: border-color 0.15s, color 0.15s;
+}
+.ci-chip:hover {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+.ci-value {
+  color: var(--text-2);
 }
 .cmp-change {
-  margin-top: 10px;
+  margin-top: 12px;
   padding: 6px 18px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -2865,12 +2937,6 @@ watch(compareOpen, (open) => {
   color: var(--accent);
   background: var(--accent-soft);
 }
-.cmp-detail-block {
-  margin-top: 14px;
-  text-align: left;
-  border-top: 1px dashed var(--border-faint);
-  padding-top: 12px;
-}
 .cmp-section {
   margin-top: 18px;
   border-top: 1px dashed var(--border-faint);
@@ -2885,27 +2951,6 @@ watch(compareOpen, (open) => {
 }
 .cmp-section-title.sub {
   margin-top: 12px;
-}
-.cmp-abilities {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--text-2);
-}
-.cmp-ability {
-  word-break: break-all;
-  cursor: help;
-  border-bottom: 1px dashed transparent;
-  transition: border-color 0.15s, color 0.15s;
-}
-.cmp-ability:hover {
-  color: var(--accent);
-  border-color: var(--accent-soft);
-}
-.cmp-meta {
-  font-size: 13px;
-  color: var(--text-2);
 }
 /* 右侧选择器 */
 .cmp-picker {
@@ -3128,46 +3173,49 @@ watch(compareOpen, (open) => {
     align-items: center;
     gap: 12px;
     text-align: left;
-    padding: 10px;
-    background: var(--surface-2);
-    border: 1px solid var(--border-faint);
-    border-radius: 12px;
+    padding: 12px;
   }
   .cmp-img {
-    width: 76px;
-    height: 76px;
+    width: 84px;
+    height: 84px;
     flex-shrink: 0;
   }
   .cmp-img img {
-    max-width: 64px;
-    max-height: 64px;
+    max-width: 72px;
+    max-height: 72px;
+  }
+  .cmp-card-body {
+    flex: 1;
   }
   .cmp-name {
     margin-top: 0;
-    font-size: 14px;
-    flex: 1;
+    font-size: 15px;
   }
   .cmp-types {
     justify-content: flex-start;
-    margin-top: 4px;
+    margin-top: 5px;
+  }
+  .cmp-info {
+    margin-top: 8px;
+    border-top: none;
+    padding-top: 0;
+    gap: 4px;
+  }
+  .ci-row {
+    font-size: 12px;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+  .ci-label {
+    min-width: 46px;
+  }
+  .ci-chip {
+    font-size: 11px;
+    padding: 1px 7px;
   }
   .cmp-change {
-    margin-top: 0;
-  }
-  .cmp-detail-block {
-    margin-top: 10px;
-    padding-top: 10px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px 12px;
-  }
-  .cmp-detail-block .cmp-section-title {
-    margin-bottom: 2px;
-    font-size: 11px;
-  }
-  .cmp-detail-block .cmp-abilities,
-  .cmp-detail-block .cmp-meta {
-    font-size: 12px;
+    margin-top: 8px;
+    padding: 5px 14px;
   }
   .cmp-picker {
     min-height: 320px;

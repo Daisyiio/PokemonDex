@@ -1309,9 +1309,13 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-faint);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
+}
+@media (min-width: 769px) {
+  .lightbox-head {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
 }
 .lightbox-title {
   font-size: 13px;
