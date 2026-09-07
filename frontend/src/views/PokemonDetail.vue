@@ -198,6 +198,7 @@ watch(
 onBeforeUnmount(() => {
   document.title = '宝可梦图鉴'
   document.removeEventListener('click', onGenDocClick)
+  document.body.style.overflow = ''
 })
 
 const form = (): Form | undefined => detail.value?.forms[activeForm.value]
@@ -535,6 +536,11 @@ function compareFormImg(d: PokemonDetail): string {
   return img ? imageUrl('official', img) : ''
 }
 
+// 弹窗打开时锁定背景滚动，避免内部滚动联动外部页面
+watch(compareOpen, (open) => {
+  document.body.style.overflow = open ? 'hidden' : ''
+})
+
 </script>
 
 <template>
@@ -550,12 +556,17 @@ function compareFormImg(d: PokemonDetail): string {
         />
       </div>
       <div class="hero-info">
-        <div class="hero-id">No. {{ detail.pokedex_id }}</div>
+        <div class="hero-top">
+          <div class="hero-id">No. {{ detail.pokedex_id }}</div>
+          <button type="button" class="compare-btn" @click="openCompare">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3M12 16l-4-4 4-4M8 12h8" />
+            </svg>
+            对比
+          </button>
+        </div>
         <h1>{{ detail.name_zh }}</h1>
         <div class="names">{{ detail.name_ja }} · {{ detail.name_en }}</div>
-        <div class="hero-compare">
-          <button type="button" class="compare-btn" @click="openCompare">对比</button>
-        </div>
         <div class="types">
           <TypeBadge v-for="t in form()?.types" :key="t" :type="t" size="lg" />
         </div>
@@ -2430,23 +2441,31 @@ function compareFormImg(d: PokemonDetail): string {
   max-height: 85vh;
   object-fit: contain;
 }
-.hero-compare {
-  margin-top: 8px;
+.hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .compare-btn {
-  padding: 6px 16px;
-  border: 1px solid var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: transparent;
-  color: var(--accent);
+  background: var(--surface);
+  color: var(--text-2);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
+  flex-shrink: 0;
 }
 .compare-btn:hover {
-  background: var(--accent);
-  color: var(--on-accent);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 .compare-backdrop {
   position: fixed;
